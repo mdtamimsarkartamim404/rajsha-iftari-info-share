@@ -63,43 +63,74 @@
             from { transform: translateY(20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
+
+        /* লোকেশন পিকারের জন্য স্টাইল */
+        .location-picker-active {
+            cursor: crosshair !important;
+        }
+        
+        .center-pin {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            pointer-events: none;
+            text-shadow: 0 0 20px rgba(16, 185, 129, 0.8);
+        }
+
+        .temp-marker {
+            background: transparent;
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script>
-        // Define global variables for Firebase config
-        window.__firebase_config = JSON.stringify({
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_AUTH_DOMAIN",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_STORAGE_BUCKET",
-            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        });
-        window.__app_id = "biriyani-dibe-app";
-        window.__initial_auth_token = null;
-    </script>
-
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Global context configuration
-        const firebaseConfig = JSON.parse(window.__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = window.__app_id;
-
-        window.fbSDK = { 
-            auth, db, appId,
-            signInAnonymously, signInWithCustomToken, onAuthStateChanged, 
-            collection, addDoc, onSnapshot, query, doc, updateDoc, increment, deleteDoc
-        };
+        // ডেমো ডাটা
+        window.DEMO_MODE = true;
+        window.DEMO_SPOTS = [
+            {
+                id: '1',
+                name: 'ধানমণ্ডি কেন্দ্রীয় মসজিদ',
+                type: 'Biriyani',
+                count: '১০০',
+                time: '১৮:৩০',
+                description: 'আজকের ইফতারে বিশেষ বিরিয়ানি',
+                lat: 23.8103,
+                lng: 90.4125,
+                realVotes: 45,
+                fakeVotes: 2,
+                createdAt: Date.now()
+            },
+            {
+                id: '2',
+                name: 'বাইতুল মোকাররম',
+                type: 'Khichuri',
+                count: '২০০',
+                time: '১৮:১৫',
+                description: 'গরম গরম খিচুড়ি বিতরণ',
+                lat: 23.7295,
+                lng: 90.4115,
+                realVotes: 78,
+                fakeVotes: 5,
+                createdAt: Date.now()
+            },
+            {
+                id: '3',
+                name: 'মোহাম্মদপুর কেন্দ্রীয় মসজিদ',
+                type: 'Haleem',
+                count: '১৫০',
+                time: '১৮:৪৫',
+                description: 'বিশেষ হালিম ইফতার',
+                lat: 23.7603,
+                lng: 90.3625,
+                realVotes: 32,
+                fakeVotes: 1,
+                createdAt: Date.now()
+            }
+        ];
     </script>
 
     <script type="text/babel">
@@ -113,9 +144,10 @@
             const [isAIChatOpen, setIsAIChatOpen] = useState(false);
             const [pickingLocation, setPickingLocation] = useState(false);
             const [isLoading, setIsLoading] = useState(true);
-            const [isGenerating, setIsGenerating] = useState(false);
             const [searchQuery, setSearchQuery] = useState("");
-            const [aiTip, setAiTip] = useState("✨ Ajker tips pete click korun!");
+            const [aiTip, setAiTip] = useState("✨ আজকের টিপস পেতে ক্লিক করুন!");
+            const [selectedLocation, setSelectedLocation] = useState(null);
+            const [tempMarker, setTempMarker] = useState(null);
             
             const [formData, setFormData] = useState({
                 name: '', type: 'Biriyani', manualItem: '', count: '', time: '18:00', description: '', lat: 23.8103, lng: 90.4125
@@ -126,155 +158,123 @@
             const markersRef = useRef([]);
             const userMarkerRef = useRef(null);
 
-            // --- Reset Logic: 7 PM Threshold ---
-            const getResetThreshold = () => {
-                const now = new Date();
-                const threshold = new Date();
-                threshold.setHours(19, 0, 0, 0); // 7:00 PM
-                
-                // If it's currently before 7 PM, the last reset was yesterday at 7 PM
-                if (now.getHours() < 19) {
-                    threshold.setDate(threshold.getDate() - 1);
-                }
-                return threshold.getTime();
-            };
-
-            // Gemini API call logic
-            const callGemini = async (prompt) => {
-                const apiKey = "AIzaSyBfE5qCBE7YS9U9N2y-C4kZnEWqSOi6nTc"; // You need to add your actual API key here
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
-                
-                const fetchWithRetry = async (retries = 5, delay = 1000) => {
-                    try {
-                        const response = await fetch(url, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                contents: [{ parts: [{ text: prompt }] }],
-                                systemInstruction: { parts: [{ text: "You are a community assistant. Respond in Latin Bangla. Short and polite." }] }
-                            })
-                        });
-                        const result = await response.json();
-                        return result.candidates?.[0]?.content?.parts?.[0]?.text || "✨ Tips load kora jayni.";
-                    } catch (error) {
-                        if (retries > 0) {
-                            await new Promise(res => setTimeout(res, delay));
-                            return fetchWithRetry(retries - 1, delay * 2);
-                        }
-                        throw error;
-                    }
-                };
-                return fetchWithRetry();
-            };
-
-            const generateAIDescription = async () => {
-                if (!formData.name) return alert("Masjid er nam likhun prothome!");
-                setIsGenerating(true);
-                const item = formData.type === 'Other' ? formData.manualItem : formData.type;
-                const prompt = `Write a short 1-line welcome message for food distribution at ${formData.name} mosque. Item: ${item}. Latin Bangla.`;
-                try {
-                    const desc = await callGemini(prompt);
-                    setFormData(prev => ({ ...prev, description: desc }));
-                } catch (e) {
-                    console.error(e);
-                } finally {
-                    setIsGenerating(false);
-                }
-            };
-
-            const getSmartTip = async () => {
-                setIsAIChatOpen(true);
-                setAiTip("✨ AI chinta korche...");
-                const prompt = "Give a quick distribution tip in 1 line. Focus on crowd or hygiene. Latin Bangla.";
-                try {
-                    const tip = await callGemini(prompt);
-                    setAiTip(tip);
-                } catch (error) {
-                    setAiTip("✨ Tips load kora jayni.");
-                }
-            };
-
-            // Authentication Handler
+            // ডেমো ডাটা লোড করা
             useEffect(() => {
-                if (!window.fbSDK) return;
-                
-                const { auth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } = window.fbSDK;
-                const initAuth = async () => {
-                    try {
-                        if (window.__initial_auth_token) {
-                            await signInWithCustomToken(auth, window.__initial_auth_token);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    } catch (err) {
-                        console.error("Auth init error:", err);
-                    }
-                };
-                initAuth();
-                const unsubscribe = onAuthStateChanged(auth, (user) => {
-                    setUser(user);
-                });
-                return () => unsubscribe();
+                if (window.DEMO_MODE) {
+                    setActiveSpots(window.DEMO_SPOTS);
+                    setIsLoading(false);
+                }
             }, []);
 
-            // Real-time Data Sync with Daily Cleanup
+            // AI টিপস জেনারেট
+            const getSmartTip = async () => {
+                setIsAIChatOpen(true);
+                const tips = [
+                    "🍛 গরম গরম বিরিয়ানি দিয়ে ইফতার শুরু করুন!",
+                    "🕌 মসজিদে আগে থেকে চলে আসুন, ভিড় এড়াতে",
+                    "💝 প্রতিবেশীদের সাথে ইফতার শেয়ার করুন",
+                    "🌙 মাগরিবের নামাজের পর ইফতার করুন",
+                    "🥘 খেজুর দিয়ে ইফতার শুরু করা সুন্নত",
+                    "🤝 ইফতার পার্টি আয়োজন করুন এলাকায়",
+                    "⏰ সময়মত ইফতার বিতরণ নিশ্চিত করুন",
+                    "🧹 পরিষ্কার-পরিচ্ছন্নতা বজায় রাখুন"
+                ];
+                const randomTip = tips[Math.floor(Math.random() * tips.length)];
+                setTimeout(() => setAiTip(randomTip), 1000);
+            };
+
+            // ম্যাপ ইনিশিয়ালাইজ
             useEffect(() => {
-                if (!user || !window.fbSDK) return;
+                if (!mapRef.current || mapInstance.current) return;
                 
-                const { db, appId, collection, onSnapshot, query, deleteDoc, doc } = window.fbSDK;
-                const spotsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'spots');
-                const q = query(spotsCollection);
-
-                const unsubscribe = onSnapshot(q, (snapshot) => {
-                    const spots = [];
-                    const threshold = getResetThreshold();
-
-                    snapshot.forEach((snapshotDoc) => {
-                        const data = snapshotDoc.data();
-                        // If spot is older than 7 PM reset, filter it and optionally delete from DB
-                        if (data.createdAt && data.createdAt > threshold) {
-                            spots.push({ id: snapshotDoc.id, ...data });
-                        } else {
-                            // Client-side auto-cleanup for the database
-                            deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'spots', snapshotDoc.id)).catch(() => {});
-                        }
-                    });
-                    setActiveSpots(spots);
-                    setIsLoading(false);
-                }, (error) => console.error("Firestore error:", error));
-
-                return () => unsubscribe();
-            }, [user]);
-
-            // Map Initialization
-            useEffect(() => {
-                if (isLoading || !mapRef.current || mapInstance.current || !window.fbSDK) return;
+                console.log("ম্যাপ ইনিশিয়ালাইজ হচ্ছে...");
                 
-                mapInstance.current = L.map(mapRef.current, { zoomControl: false, attributionControl: false }).setView([23.8103, 90.4125], 13);
+                mapInstance.current = L.map(mapRef.current, { 
+                    zoomControl: false, 
+                    attributionControl: false 
+                }).setView([23.8103, 90.4125], 13);
+                
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance.current);
 
-                // Auto Location Trigger
-                mapInstance.current.locate({ setView: true, watch: true, maxZoom: 16 });
+                // ইউজার লোকেশন ট্র্যাক
+                mapInstance.current.locate({ setView: false, watch: true, maxZoom: 16 });
+                
                 mapInstance.current.on('locationfound', (e) => {
+                    console.log("লোকেশন পাওয়া গেছে:", e.latlng);
                     if (userMarkerRef.current) userMarkerRef.current.remove();
                     userMarkerRef.current = L.marker(e.latlng, {
                         icon: L.divIcon({ className: 'user-marker', iconSize: [16, 16] })
                     }).addTo(mapInstance.current);
                 });
 
-                // Crucial for Location Picking: Update coordinates as user moves the map
-                mapInstance.current.on('move', () => {
-                    if (pickingLocation) {
-                        const center = mapInstance.current.getCenter();
-                        // We always update the internal formData coordinate to match map center while picking
-                        setFormData(prev => ({ ...prev, lat: center.lat, lng: center.lng }));
-                    }
+                mapInstance.current.on('locationerror', (e) => {
+                    console.log("লোকেশন এরর:", e);
                 });
-            }, [isLoading, pickingLocation]);
 
-            // Render Markers
+                setIsLoading(false);
+            }, []);
+
+            // লোকেশন পিকিং মোড
             useEffect(() => {
                 if (!mapInstance.current) return;
+                
+                if (pickingLocation) {
+                    console.log("লোকেশন পিকিং মোড চালু");
+                    
+                    // আগের টেম্প মার্কার সরান
+                    if (tempMarker) {
+                        mapInstance.current.removeLayer(tempMarker);
+                        setTempMarker(null);
+                    }
+                    
+                    setSelectedLocation(null);
+                    
+                    // ম্যাপের ক্লিক ইভেন্ট হ্যান্ডলার
+                    const handleMapClick = (e) => {
+                        console.log("ম্যাপে ক্লিক করা হয়েছে:", e.latlng);
+                        
+                        // আগের টেম্প মার্কার সরান
+                        if (tempMarker) {
+                            mapInstance.current.removeLayer(tempMarker);
+                        }
+                        
+                        // নতুন টেম্প মার্কার তৈরি
+                        const newMarker = L.marker(e.latlng, {
+                            icon: L.divIcon({
+                                className: 'temp-marker',
+                                html: '<div style="width: 24px; height: 24px; background: #10b981; border: 4px solid white; border-radius: 50%; box-shadow: 0 0 30px #10b981; animation: ping 1s infinite;"></div>',
+                                iconSize: [24, 24]
+                            })
+                        }).addTo(mapInstance.current);
+                        
+                        setTempMarker(newMarker);
+                        setSelectedLocation(e.latlng);
+                        
+                        // ফর্ম ডাটা আপডেট
+                        setFormData(prev => ({ 
+                            ...prev, 
+                            lat: e.latlng.lat, 
+                            lng: e.latlng.lng 
+                        }));
+                    };
+                    
+                    mapInstance.current.on('click', handleMapClick);
+                    
+                    // ক্লিনআপ ফাংশন
+                    return () => {
+                        mapInstance.current.off('click', handleMapClick);
+                        if (tempMarker) {
+                            mapInstance.current.removeLayer(tempMarker);
+                        }
+                    };
+                }
+            }, [pickingLocation]);
+
+            // মার্কার রেন্ডার
+            useEffect(() => {
+                if (!mapInstance.current) return;
+                
+                console.log("মার্কার রেন্ডার হচ্ছে:", activeSpots.length);
                 
                 markersRef.current.forEach(m => m.remove());
                 markersRef.current = [];
@@ -290,7 +290,7 @@
                                             <path d="M12 2L4.5 11V22H19.5V11L12 2M12 4.44L17.5 11H6.5L12 4.44M11 20H8V13H11V20M16 20H13V13H16V20Z"/>
                                         </svg>
                                     </div>
-                                    <div class="bg-black/90 text-white text-[10px] px-2 py-0.5 rounded border border-white/20 mt-1 whitespace-nowrap">${spot.name?.split(' ')[0] || 'Mosjid'}</div>
+                                    <div class="bg-black/90 text-white text-[10px] px-2 py-0.5 rounded border border-white/20 mt-1 whitespace-nowrap">${spot.name?.split(' ')[0] || 'মসজিদ'}</div>
                                 </div>
                             `,
                             iconSize: [44, 60],
@@ -300,56 +300,77 @@
 
                     marker.bindPopup(`
                         <div class="p-3 text-center font-sans text-black">
-                            <b class="text-sm block mb-1 font-bold">${spot.name || 'Mosjid'}</b>
-                            <p class="text-[11px] italic mb-2">${spot.description || 'Iftar distribution.'}</p>
-                            <div class="text-xs font-black bg-emerald-100 text-emerald-700 py-1 rounded-lg mb-2">${spot.type || 'Food'} - ${spot.count || '0'} jon</div>
+                            <b class="text-sm block mb-1 font-bold">${spot.name || 'মসজিদ'}</b>
+                            <p class="text-[11px] italic mb-2">${spot.description || 'ইফতার বিতরণ'}</p>
+                            <div class="text-xs font-black bg-emerald-100 text-emerald-700 py-1 rounded-lg mb-2">${spot.type || 'খাবার'} - ${spot.count || '০'} জন</div>
                             <div class="flex justify-center gap-2">
-                                <button onclick="window.handleVote('${spot.id}', 'real')" class="px-2 py-1 bg-emerald-50 rounded text-[10px] border border-emerald-200 hover:bg-emerald-100">👍 Real (${spot.realVotes || 0})</button>
-                                <button onclick="window.handleVote('${spot.id}', 'fake')" class="px-2 py-1 bg-red-50 rounded text-[10px] border border-red-200 hover:bg-red-100">👎 Fake (${spot.fakeVotes || 0})</button>
+                                <span class="px-2 py-1 bg-emerald-50 rounded text-[10px]">👍 ${spot.realVotes || 0}</span>
+                                <span class="px-2 py-1 bg-red-50 rounded text-[10px]">👎 ${spot.fakeVotes || 0}</span>
                             </div>
                         </div>
                     `);
+                    
                     markersRef.current.push(marker);
                 });
             }, [activeSpots]);
 
-            // Vote Logic
-            useEffect(() => {
-                window.handleVote = async (id, type) => {
-                    if (localStorage.getItem(`voted_${id}`)) return alert("Apni ebare vote diye feleshen!");
-                    if (!window.fbSDK) return;
-                    
-                    const { db, appId, doc, updateDoc, increment } = window.fbSDK;
-                    const spotRef = doc(db, 'artifacts', appId, 'public', 'data', 'spots', id);
-                    try {
-                        await updateDoc(spotRef, { [type === 'real' ? 'realVotes' : 'fakeVotes']: increment(1) });
-                        localStorage.setItem(`voted_${id}`, 'true');
-                    } catch (e) { console.error(e); }
-                };
-            }, []);
-
-            const addNewSpot = async () => {
-                if (!formData.name) return alert("Nam likhun prothome!");
-                if (!user || !window.fbSDK) return alert("Please wait for authentication!");
+            // স্পট যোগ করার ফাংশন
+            const addNewSpot = () => {
+                console.log("addNewSpot কল করা হয়েছে");
+                console.log("formData:", formData);
+                console.log("selectedLocation:", selectedLocation);
                 
-                const { db, appId, collection, addDoc } = window.fbSDK;
-                try {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'spots'), {
-                        ...formData,
-                        type: formData.type === 'Other' ? formData.manualItem : formData.type,
-                        realVotes: 0, 
-                        fakeVotes: 0, 
-                        createdAt: Date.now(), 
-                        userId: user.uid
-                    });
-                    setIsModalOpen(false);
-                    setPickingLocation(false);
-                    // Reset form
-                    setFormData({ name: '', type: 'Biriyani', manualItem: '', count: '', time: '18:00', description: '', lat: 23.8103, lng: 90.4125 });
-                } catch (e) { 
-                    console.error(e); 
-                    alert("Kichu ekta somossa hoyeche!");
+                if (!formData.name) {
+                    alert("মসজিদের নাম লিখুন!");
+                    return;
                 }
+                
+                if (!selectedLocation) {
+                    alert("দয়া করে ম্যাপে একটি লোকেশন সিলেক্ট করুন!");
+                    return;
+                }
+                
+                const newSpot = {
+                    id: Date.now().toString(),
+                    name: formData.name,
+                    type: formData.type === 'Other' ? formData.manualItem : formData.type,
+                    count: formData.count || '০',
+                    time: formData.time,
+                    description: formData.description || 'ইফতার বিতরণ',
+                    lat: selectedLocation.lat,
+                    lng: selectedLocation.lng,
+                    realVotes: 0,
+                    fakeVotes: 0,
+                    createdAt: Date.now()
+                };
+                
+                console.log("নতুন স্পট যোগ করা হচ্ছে:", newSpot);
+                
+                setActiveSpots(prev => [...prev, newSpot]);
+                
+                // টেম্প মার্কার সরান
+                if (tempMarker) {
+                    mapInstance.current.removeLayer(tempMarker);
+                    setTempMarker(null);
+                }
+                
+                // সব স্টেট রিসেট
+                setPickingLocation(false);
+                setIsModalOpen(false);
+                setSelectedLocation(null);
+                
+                setFormData({ 
+                    name: '', 
+                    type: 'Biriyani', 
+                    manualItem: '', 
+                    count: '', 
+                    time: '18:00', 
+                    description: '', 
+                    lat: 23.8103, 
+                    lng: 90.4125 
+                });
+                
+                alert("✅ সফলভাবে স্পট যোগ করা হয়েছে!");
             };
 
             const filteredSpots = activeSpots.filter(s => 
@@ -362,28 +383,28 @@
                     {isLoading && (
                         <div className="loading-screen">
                             <span className="text-8xl animate-bounce mb-8">🍛</span>
-                            <p className="text-emerald-500 font-bold animate-pulse uppercase tracking-widest">Live Map Load Hocche...</p>
+                            <p className="text-emerald-500 font-bold animate-pulse uppercase tracking-widest">লাইভ ম্যাপ লোড হচ্ছে...</p>
                         </div>
                     )}
 
-                    {/* AI Tip Bubble */}
+                    {/* AI টিপস */}
                     {isAIChatOpen && (
                         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md p-4 bg-emerald-900/90 backdrop-blur-md rounded-2xl border border-emerald-500/30 shadow-2xl chat-bubble">
                             <div className="flex justify-between items-center mb-1">
-                                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">✨ AI SHOAYOK</span>
+                                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">✨ এআই সহায়ক</span>
                                 <button onClick={() => setIsAIChatOpen(false)} className="text-white/50 hover:text-white">✕</button>
                             </div>
                             <p className="text-sm font-medium leading-relaxed">{aiTip}</p>
                         </div>
                     )}
 
-                    {/* Top Search Interface */}
+                    {/* সার্চ বার */}
                     <header className={`p-4 z-20 transition-opacity duration-300 ${pickingLocation ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
                         <div className="flex gap-2 bg-black/50 backdrop-blur-xl p-2 rounded-full border border-white/5 items-center shadow-2xl">
                             <div className="bg-emerald-500 w-10 h-10 rounded-full flex items-center justify-center shadow-lg text-xl">🍛</div>
                             <input 
                                 className="flex-1 bg-transparent outline-none text-sm px-2 font-bold text-white placeholder:text-gray-600" 
-                                placeholder="Khujun (Mosjid/Item)..."
+                                placeholder="খুঁজুন (মসজিদ/আইটেম)..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
@@ -391,61 +412,95 @@
                         </div>
                     </header>
 
-                    {/* Map Area */}
+                    {/* ম্যাপ এরিয়া */}
                     <div ref={mapRef} className="flex-1 relative z-10">
                         {pickingLocation && (
-                            <div className="absolute inset-0 pointer-events-none z-30 flex flex-col items-center justify-center">
-                                {/* Fixed Center Pin Indicator */}
-                                <div className="mb-20 text-emerald-500 animate-bounce drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]">
-                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+                            <>
+                                {/* সেন্টার পিন - ক্লিক করার জন্য গাইড */}
+                                <div className="center-pin">
+                                    <div className="relative">
+                                        <div className="w-8 h-8 bg-emerald-500 rounded-full animate-ping opacity-50 absolute"></div>
+                                        <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center relative">
+                                            <div className="w-3 h-3 bg-white rounded-full"></div>
+                                        </div>
+                                    </div>
+                                    <p className="text-white text-xs mt-2 bg-black/50 px-2 py-1 rounded-full whitespace-nowrap">
+                                        📍 মসজিদের位置上 ক্লিক করুন
+                                    </p>
                                 </div>
                                 
-                                {/* Location Confirmation UI */}
-                                <div className="absolute bottom-10 flex flex-col gap-3 w-full px-8 pointer-events-auto max-w-md">
-                                    <div className="bg-black/90 backdrop-blur-md p-4 rounded-3xl border border-white/10 text-center shadow-2xl">
-                                        <p className="text-[10px] text-gray-500 font-black uppercase mb-1 tracking-widest">Pin exact mosque position</p>
-                                        <h4 className="font-black truncate text-white text-lg">{formData.name || 'Set Location'}</h4>
+                                {/* লোকেশন তথ্য এবং কনফার্ম বাটন */}
+                                <div className="absolute bottom-10 left-0 right-0 flex flex-col gap-3 px-4 z-30">
+                                    <div className="bg-black/90 backdrop-blur-md p-4 rounded-2xl border border-white/10 text-center shadow-2xl">
+                                        <p className="text-[10px] text-gray-500 font-black uppercase mb-1 tracking-widest">
+                                            {selectedLocation ? '✅ লোকেশন সিলেক্ট করা হয়েছে' : '👆 ম্যাপে ক্লিক করুন'}
+                                        </p>
+                                        {selectedLocation && (
+                                            <div className="text-emerald-400 text-sm font-bold">
+                                                {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
+                                            </div>
+                                        )}
+                                        <div className="mt-2 text-white font-bold">
+                                            {formData.name || 'মসজিদের নাম'}
+                                        </div>
                                     </div>
-                                    <button 
-                                        onClick={addNewSpot} 
-                                        className="w-full bg-emerald-600 py-5 rounded-full font-black shadow-[0_10px_30px_rgba(16,185,129,0.4)] active:scale-95 transition-all text-white text-lg uppercase tracking-tight"
-                                    >
-                                        Ekhane Distribution Shuru
-                                    </button>
-                                    <button 
-                                        onClick={() => { setPickingLocation(false); setIsModalOpen(true); }} 
-                                        className="text-sm text-gray-500 font-bold hover:text-white transition-colors"
-                                    >
-                                        Cancel & Edit Info
-                                    </button>
+                                    
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={addNewSpot}
+                                            disabled={!selectedLocation}
+                                            className={`flex-1 py-4 rounded-xl font-bold text-white transition-all ${
+                                                selectedLocation 
+                                                    ? 'bg-emerald-600 active:scale-95 shadow-lg shadow-emerald-900/40' 
+                                                    : 'bg-gray-600 opacity-50 cursor-not-allowed'
+                                            }`}
+                                        >
+                                            {selectedLocation ? '✅ কনফার্ম' : '⏳ সিলেক্ট করুন'}
+                                        </button>
+                                        
+                                        <button 
+                                            onClick={() => { 
+                                                setPickingLocation(false); 
+                                                setIsModalOpen(true);
+                                                if (tempMarker) {
+                                                    mapInstance.current.removeLayer(tempMarker);
+                                                    setTempMarker(null);
+                                                }
+                                                setSelectedLocation(null);
+                                            }} 
+                                            className="px-6 py-4 bg-red-600/20 border border-red-600/30 rounded-xl text-white font-bold"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
+                            </>
                         )}
                     </div>
 
-                    {/* Action Buttons */}
+                    {/* অ্যাকশন বাটন */}
                     <div className={`fixed bottom-28 right-6 z-20 flex flex-col gap-4 ${pickingLocation ? 'hidden' : 'flex'}`}>
-                        <button className="w-14 h-14 bg-white/5 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center shadow-xl active:scale-90 transition-all group" onClick={() => mapInstance.current?.locate({ setView: true })}>
+                        <button className="w-14 h-14 bg-white/5 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center shadow-xl active:scale-90 transition-all" onClick={() => mapInstance.current?.locate({ setView: true })}>
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
                         </button>
                         <button className="w-16 h-16 bg-orange-600 rounded-full flex items-center justify-center shadow-[0_10px_30px_rgba(234,88,12,0.4)] text-4xl font-bold active:scale-90 transition-all hover:rotate-90" onClick={() => setIsModalOpen(true)}>+</button>
                     </div>
 
-                    {/* Bottom List Sheet */}
+                    {/* নিচের লিস্ট */}
                     <div className={`fixed inset-x-0 bottom-0 z-40 bg-[#0c0c0c] border-t border-white/5 rounded-t-[2.5rem] transition-all duration-500 ease-out flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,1)] ${isBottomSheetOpen ? 'h-[75vh]' : 'h-24'} ${pickingLocation ? 'translate-y-full' : ''}`}>
                         <div onClick={() => setIsBottomSheetOpen(!isBottomSheetOpen)} className="w-full flex flex-col items-center py-4 cursor-pointer active:bg-white/5">
                             <div className="w-10 h-1 bg-white/20 rounded-full mb-3"></div>
                             <div className="flex justify-between w-full px-8 items-center">
                                 <div className="flex items-center gap-2">
-                                    <span className="font-black text-emerald-500 text-sm uppercase tracking-wider">Nearby Distribution</span>
-                                    <span className="bg-emerald-900/50 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-bold">{filteredSpots.length} ta</span>
+                                    <span className="font-black text-emerald-500 text-sm uppercase tracking-wider">কাছের ডিস্ট্রিবিউশন</span>
+                                    <span className="bg-emerald-900/50 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-bold">{filteredSpots.length} টা</span>
                                 </div>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className={`transition-transform duration-300 ${isBottomSheetOpen ? 'rotate-180' : ''}`}><path d="m18 15-6-6-6 6"/></svg>
                             </div>
                         </div>
                         <div className="flex-1 overflow-y-auto px-6 pb-10 hide-scrollbar">
                             {filteredSpots.length === 0 ? (
-                                <div className="text-center py-20 opacity-20 font-bold">Kono active spot pawa jayni</div>
+                                <div className="text-center py-20 opacity-20 font-bold">কোনো স্পট পাওয়া যায়নি</div>
                             ) : (
                                 <div className="space-y-3">
                                     {filteredSpots.map(spot => (
@@ -457,7 +512,7 @@
                                                     <span className="text-[10px] font-black text-emerald-400 uppercase bg-emerald-500/10 px-2 py-0.5 rounded-md">{spot.type}</span>
                                                 </div>
                                                 <div className="flex justify-between items-center text-[11px] text-gray-500 font-bold uppercase tracking-widest">
-                                                    <span>{spot.count} jon • {spot.time}</span>
+                                                    <span>{spot.count} জন • {spot.time}</span>
                                                     <div className="flex gap-2">
                                                         <span className="text-emerald-400">👍 {spot.realVotes || 0}</span>
                                                         <span className="text-red-400">👎 {spot.fakeVotes || 0}</span>
@@ -471,56 +526,61 @@
                         </div>
                     </div>
 
-                    {/* Spot Info Modal */}
+                    {/* স্পট ইনফো মোডাল */}
                     {isModalOpen && (
                         <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-6 backdrop-blur-lg animate-in fade-in duration-300">
                             <div className="bg-[#121212] w-full max-w-sm p-8 rounded-[3.5rem] border border-white/5 shadow-2xl relative">
                                 <button className="absolute top-8 right-8 text-gray-500 text-2xl hover:text-white" onClick={() => setIsModalOpen(false)}>✕</button>
-                                <h3 className="text-2xl font-black mb-8 tracking-tighter text-white">Distribution Info</h3>
+                                <h3 className="text-2xl font-black mb-8 tracking-tighter text-white">ডিস্ট্রিবিউশন তথ্য</h3>
                                 <div className="space-y-4">
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-gray-600 uppercase ml-3">Mosjid Name</label>
-                                        <input className="w-full bg-black p-4 rounded-2xl border border-white/5 outline-none font-bold text-white placeholder:text-gray-700 focus:ring-1 focus:ring-emerald-500/30 transition-all" placeholder="যেমন: ধানমণ্ডি কেন্দ্রীয় মসজিদ" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+                                        <label className="text-[10px] font-black text-gray-600 uppercase ml-3">মসজিদের নাম *</label>
+                                        <input 
+                                            className="w-full bg-black p-4 rounded-2xl border border-white/5 outline-none font-bold text-white placeholder:text-gray-700 focus:ring-1 focus:ring-emerald-500/30 transition-all" 
+                                            placeholder="যেমন: ধানমণ্ডি কেন্দ্রীয় মসজিদ" 
+                                            value={formData.name} 
+                                            onChange={(e) => setFormData({...formData, name: e.target.value})} 
+                                        />
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-gray-600 uppercase ml-3">Menu</label>
+                                            <label className="text-[10px] font-black text-gray-600 uppercase ml-3">মেনু</label>
                                             <select className="w-full bg-black p-4 rounded-2xl outline-none border border-white/5 text-white font-bold appearance-none" value={formData.type} onChange={(e) => setFormData({...formData, type: e.target.value})}>
-                                                <option value="Biriyani">Biriyani</option>
-                                                <option value="Khichuri">Khichuri</option>
-                                                <option value="Haleem">Haleem</option>
-                                                <option value="Other">Other (Likhi)</option>
+                                                <option value="Biriyani">বিরিয়ানি</option>
+                                                <option value="Khichuri">খিচুড়ি</option>
+                                                <option value="Haleem">হালিম</option>
+                                                <option value="Other">অন্যান্য</option>
                                             </select>
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-gray-600 uppercase ml-3">Count</label>
-                                            <input type="number" placeholder="১০০" className="w-full bg-black p-4 rounded-2xl outline-none border border-white/5 text-white font-bold" value={formData.count} onChange={(e) => setFormData({...formData, count: e.target.value})} />
+                                            <label className="text-[10px] font-black text-gray-600 uppercase ml-3">পরিমাণ</label>
+                                            <input type="text" placeholder="১০০" className="w-full bg-black p-4 rounded-2xl outline-none border border-white/5 text-white font-bold" value={formData.count} onChange={(e) => setFormData({...formData, count: e.target.value})} />
                                         </div>
                                     </div>
                                     {formData.type === 'Other' && (
-                                        <input className="w-full bg-emerald-900/20 p-4 rounded-2xl border border-emerald-500/20 outline-none font-black text-emerald-400 animate-in slide-in-from-top-2" placeholder="Iftar Item Er Nam Likhun" value={formData.manualItem} onChange={(e) => setFormData({...formData, manualItem: e.target.value})} />
+                                        <input className="w-full bg-emerald-900/20 p-4 rounded-2xl border border-emerald-500/20 outline-none font-black text-emerald-400" placeholder="আইটেমের নাম লিখুন" value={formData.manualItem} onChange={(e) => setFormData({...formData, manualItem: e.target.value})} />
                                     )}
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-gray-600 uppercase ml-3">Invitation (AI)</label>
-                                        <div className="flex gap-2 items-center bg-black rounded-2xl border border-white/5 p-2 pr-4">
-                                            <input className="flex-1 bg-transparent p-2 outline-none text-[11px] text-gray-400" placeholder="AI invitation generate korun..." value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
-                                            <button onClick={generateAIDescription} disabled={isGenerating} className="bg-emerald-600/20 text-emerald-400 px-4 py-2 rounded-xl text-[10px] font-black hover:bg-emerald-600/40 disabled:opacity-50 transition-all">{isGenerating ? '...' : '✨ AI'}</button>
-                                        </div>
+                                        <label className="text-[10px] font-black text-gray-600 uppercase ml-3">আমন্ত্রণ</label>
+                                        <input className="w-full bg-black p-4 rounded-2xl border border-white/5 outline-none font-bold text-white placeholder:text-gray-700" placeholder="আমন্ত্রণ লিখুন..." value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
                                     </div>
                                     <div className="flex items-center gap-3 bg-black p-1 rounded-2xl border border-white/5">
-                                        <label className="text-[10px] text-gray-500 font-black uppercase ml-3 shrink-0">Dist. Time:</label>
+                                        <label className="text-[10px] text-gray-500 font-black uppercase ml-3 shrink-0">সময়:</label>
                                         <input type="time" className="flex-1 bg-transparent p-4 rounded-xl outline-none text-white font-bold" value={formData.time} onChange={(e) => setFormData({...formData, time: e.target.value})} />
                                     </div>
                                 </div>
                                 <button 
                                     className="w-full bg-emerald-600 py-6 rounded-full font-black text-lg mt-10 active:scale-95 transition-all shadow-xl shadow-emerald-900/40 hover:bg-emerald-500" 
                                     onClick={() => { 
-                                        if(!formData.name) return alert("Age mosjid er nam likhun!");
+                                        if(!formData.name) {
+                                            alert("মসজিদের নাম লিখুন!");
+                                            return;
+                                        }
                                         setIsModalOpen(false); 
-                                        setPickingLocation(true); 
+                                        setPickingLocation(true);
                                     }}
                                 >
-                                    Location Set Korun
+                                    🗺️ ম্যাপে লোকেশন সিলেক্ট করুন
                                 </button>
                             </div>
                         </div>
