@@ -15,35 +15,6 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Global context theke config nawa
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-        window.fbSDK = { 
-            auth, 
-            db, 
-            appId,
-            signInAnonymously, 
-            signInWithCustomToken, 
-            onAuthStateChanged, 
-            collection, 
-            addDoc, 
-            onSnapshot, 
-            query, 
-            doc, 
-            deleteDoc 
-        };
-    </script>
-
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&display=swap');
         
@@ -74,7 +45,7 @@
             100% { transform: scale(1); opacity: 1; }
         }
 
-        .leaflet-popup-content-wrapper { border-radius: 1.5rem; background: white; color: black; }
+        .leaflet-popup-content-wrapper { border-radius: 1.5rem; background: white; color: black; padding: 0; }
         .leaflet-container { background: #080808 !important; }
         
         .loading-screen {
@@ -82,7 +53,9 @@
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
 
-        /* AI Chat Bubble Styles */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
         .chat-bubble {
             animation: slideIn 0.3s ease-out;
         }
@@ -94,6 +67,40 @@
 </head>
 <body>
     <div id="root"></div>
+
+    <script>
+        // Define global variables for Firebase config
+        window.__firebase_config = JSON.stringify({
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        });
+        window.__app_id = "biriyani-dibe-app";
+        window.__initial_auth_token = null;
+    </script>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, doc, updateDoc, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global context configuration
+        const firebaseConfig = JSON.parse(window.__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = window.__app_id;
+
+        window.fbSDK = { 
+            auth, db, appId,
+            signInAnonymously, signInWithCustomToken, onAuthStateChanged, 
+            collection, addDoc, onSnapshot, query, doc, updateDoc, increment, deleteDoc
+        };
+    </script>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
@@ -108,10 +115,10 @@
             const [isLoading, setIsLoading] = useState(true);
             const [isGenerating, setIsGenerating] = useState(false);
             const [searchQuery, setSearchQuery] = useState("");
-            const [aiTip, setAiTip] = useState("✨ Ajker distribution-er tips pete ekhane click korun!");
+            const [aiTip, setAiTip] = useState("✨ Ajker tips pete click korun!");
             
             const [formData, setFormData] = useState({
-                name: '', type: 'Biriyani', count: '', time: '18:00', description: '', lat: 23.8103, lng: 90.4125
+                name: '', type: 'Biriyani', manualItem: '', count: '', time: '18:00', description: '', lat: 23.8103, lng: 90.4125
             });
 
             const mapRef = useRef(null);
@@ -119,10 +126,23 @@
             const markersRef = useRef([]);
             const userMarkerRef = useRef(null);
 
-            // Gemini API Implementation with Exponential Backoff
+            // --- Reset Logic: 7 PM Threshold ---
+            const getResetThreshold = () => {
+                const now = new Date();
+                const threshold = new Date();
+                threshold.setHours(19, 0, 0, 0); // 7:00 PM
+                
+                // If it's currently before 7 PM, the last reset was yesterday at 7 PM
+                if (now.getHours() < 19) {
+                    threshold.setDate(threshold.getDate() - 1);
+                }
+                return threshold.getTime();
+            };
+
+            // Gemini API call logic
             const callGemini = async (prompt) => {
-                const apiKey = ""; // Execution environment provides this
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                const apiKey = "AIzaSyBfE5qCBE7YS9U9N2y-C4kZnEWqSOi6nTc"; // You need to add your actual API key here
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
                 
                 const fetchWithRetry = async (retries = 5, delay = 1000) => {
                     try {
@@ -131,11 +151,11 @@
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
                                 contents: [{ parts: [{ text: prompt }] }],
-                                systemInstruction: { parts: [{ text: "You are a helpful assistant for a charity food distribution app. Keep responses in Bangla (Latin) script. Be concise, polite, and community-focused." }] }
+                                systemInstruction: { parts: [{ text: "You are a community assistant. Respond in Latin Bangla. Short and polite." }] }
                             })
                         });
                         const result = await response.json();
-                        return result.candidates?.[0]?.content?.parts?.[0]?.text;
+                        return result.candidates?.[0]?.content?.parts?.[0]?.text || "✨ Tips load kora jayni.";
                     } catch (error) {
                         if (retries > 0) {
                             await new Promise(res => setTimeout(res, delay));
@@ -144,20 +164,19 @@
                         throw error;
                     }
                 };
-
                 return fetchWithRetry();
             };
 
             const generateAIDescription = async () => {
-                if (!formData.name) return alert("Prothome masjid-er nam likhun!");
+                if (!formData.name) return alert("Masjid er nam likhun prothome!");
                 setIsGenerating(true);
-                const prompt = `Write a short, inviting 1-line description in Bangla (Latin script) for food distribution at "${formData.name}". They are giving "${formData.type}" for around "${formData.count}" people. Make it sound blessed and welcoming.`;
-                
+                const item = formData.type === 'Other' ? formData.manualItem : formData.type;
+                const prompt = `Write a short 1-line welcome message for food distribution at ${formData.name} mosque. Item: ${item}. Latin Bangla.`;
                 try {
                     const desc = await callGemini(prompt);
                     setFormData(prev => ({ ...prev, description: desc }));
-                } catch (error) {
-                    alert("AI description generate kora jayni. Abbar chesta korun.");
+                } catch (e) {
+                    console.error(e);
                 } finally {
                     setIsGenerating(false);
                 }
@@ -166,99 +185,97 @@
             const getSmartTip = async () => {
                 setIsAIChatOpen(true);
                 setAiTip("✨ AI chinta korche...");
-                const prompt = "Give a quick tips in 2 lines for someone organizing an Iftar distribution. Use Bangla (Latin script). Focus on cleanliness and crowd management.";
-                
+                const prompt = "Give a quick distribution tip in 1 line. Focus on crowd or hygiene. Latin Bangla.";
                 try {
                     const tip = await callGemini(prompt);
                     setAiTip(tip);
                 } catch (error) {
-                    setAiTip("✨ Tips load kora jayni. Pore chesta korun.");
+                    setAiTip("✨ Tips load kora jayni.");
                 }
             };
 
-            // Step 1: Handle Authentication
+            // Authentication Handler
             useEffect(() => {
-                const { auth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } = window.fbSDK;
+                if (!window.fbSDK) return;
                 
+                const { auth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } = window.fbSDK;
                 const initAuth = async () => {
                     try {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(auth, __initial_auth_token);
+                        if (window.__initial_auth_token) {
+                            await signInWithCustomToken(auth, window.__initial_auth_token);
                         } else {
                             await signInAnonymously(auth);
                         }
-                    } catch (error) {
-                        console.error("Auth error:", error);
+                    } catch (err) {
+                        console.error("Auth init error:", err);
                     }
                 };
-                
                 initAuth();
-                const unsubscribe = onAuthStateChanged(auth, setUser);
+                const unsubscribe = onAuthStateChanged(auth, (user) => {
+                    setUser(user);
+                });
                 return () => unsubscribe();
             }, []);
 
-            // Step 2: Fetch Data after Auth
+            // Real-time Data Sync with Daily Cleanup
             useEffect(() => {
-                if (!user) return;
-
-                const { db, appId, collection, onSnapshot, query } = window.fbSDK;
-                const spotsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'spots');
+                if (!user || !window.fbSDK) return;
                 
+                const { db, appId, collection, onSnapshot, query, deleteDoc, doc } = window.fbSDK;
+                const spotsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'spots');
                 const q = query(spotsCollection);
+
                 const unsubscribe = onSnapshot(q, (snapshot) => {
                     const spots = [];
-                    const now = new Date();
-                    const resetTime = new Date();
-                    resetTime.setHours(19, 0, 0, 0);
-                    if (now.getHours() < 19) resetTime.setDate(resetTime.getDate() - 1);
+                    const threshold = getResetThreshold();
 
-                    snapshot.forEach((doc) => {
-                        const data = doc.data();
-                        if (data.createdAt > resetTime.getTime()) {
-                            spots.push({ id: doc.id, ...data });
+                    snapshot.forEach((snapshotDoc) => {
+                        const data = snapshotDoc.data();
+                        // If spot is older than 7 PM reset, filter it and optionally delete from DB
+                        if (data.createdAt && data.createdAt > threshold) {
+                            spots.push({ id: snapshotDoc.id, ...data });
+                        } else {
+                            // Client-side auto-cleanup for the database
+                            deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'spots', snapshotDoc.id)).catch(() => {});
                         }
                     });
                     setActiveSpots(spots);
                     setIsLoading(false);
-                }, (error) => {
-                    console.error("Firestore error:", error);
-                    setIsLoading(false);
-                });
+                }, (error) => console.error("Firestore error:", error));
 
                 return () => unsubscribe();
             }, [user]);
 
             // Map Initialization
             useEffect(() => {
-                if (isLoading || !mapRef.current || mapInstance.current) return;
-
-                mapInstance.current = L.map(mapRef.current, {
-                    zoomControl: false,
-                    attributionControl: false
-                }).setView([23.8103, 90.4125], 13);
-
+                if (isLoading || !mapRef.current || mapInstance.current || !window.fbSDK) return;
+                
+                mapInstance.current = L.map(mapRef.current, { zoomControl: false, attributionControl: false }).setView([23.8103, 90.4125], 13);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance.current);
 
+                // Auto Location Trigger
                 mapInstance.current.locate({ setView: true, watch: true, maxZoom: 16 });
-
                 mapInstance.current.on('locationfound', (e) => {
                     if (userMarkerRef.current) userMarkerRef.current.remove();
                     userMarkerRef.current = L.marker(e.latlng, {
                         icon: L.divIcon({ className: 'user-marker', iconSize: [16, 16] })
-                    }).addTo(mapInstance.current).bindPopup("Apni ekhane achen");
+                    }).addTo(mapInstance.current);
                 });
 
+                // Crucial for Location Picking: Update coordinates as user moves the map
                 mapInstance.current.on('move', () => {
                     if (pickingLocation) {
                         const center = mapInstance.current.getCenter();
+                        // We always update the internal formData coordinate to match map center while picking
                         setFormData(prev => ({ ...prev, lat: center.lat, lng: center.lng }));
                     }
                 });
-            }, [isLoading]);
+            }, [isLoading, pickingLocation]);
 
-            // Sync Markers
+            // Render Markers
             useEffect(() => {
                 if (!mapInstance.current) return;
+                
                 markersRef.current.forEach(m => m.remove());
                 markersRef.current = [];
 
@@ -267,172 +284,243 @@
                         icon: L.divIcon({
                             className: 'custom-marker',
                             html: `
-                                <div class="mosjid-marker-container">
+                                <div class="flex flex-col items-center">
                                     <div class="mosjid-marker-pin">
                                         <svg viewBox="0 0 24 24" fill="white" style="width:24px;height:24px;">
                                             <path d="M12 2L4.5 11V22H19.5V11L12 2M12 4.44L17.5 11H6.5L12 4.44M11 20H8V13H11V20M16 20H13V13H16V20Z"/>
                                         </svg>
                                     </div>
-                                    <div class="mosjid-label" style="background:black; color:white; font-size:10px; padding:2px 6px; border-radius:5px; margin-top:5px; white-space:nowrap; border: 1px solid rgba(255,255,255,0.2)">${spot.name.split(' ')[0]}</div>
+                                    <div class="bg-black/90 text-white text-[10px] px-2 py-0.5 rounded border border-white/20 mt-1 whitespace-nowrap">${spot.name?.split(' ')[0] || 'Mosjid'}</div>
                                 </div>
                             `,
                             iconSize: [44, 60],
                             iconAnchor: [22, 50]
                         })
                     }).addTo(mapInstance.current);
-                    
+
                     marker.bindPopup(`
-                        <div style="padding:10px; text-align:center; font-family: 'Hind Siliguri', sans-serif;">
-                            <b style="font-size:14px; color: #10b981;">${spot.name}</b><br/>
-                            <p style="font-size:11px; margin: 5px 0; font-style: italic;">${spot.description || 'Shobar jonno iftarer dowa.'}</p>
-                            <span style="font-size:12px; font-weight: bold;">${spot.type} - ${spot.count} jon</span><br/>
-                            <span style="font-size:10px; color:gray;">Somoy: ${spot.time}</span>
+                        <div class="p-3 text-center font-sans text-black">
+                            <b class="text-sm block mb-1 font-bold">${spot.name || 'Mosjid'}</b>
+                            <p class="text-[11px] italic mb-2">${spot.description || 'Iftar distribution.'}</p>
+                            <div class="text-xs font-black bg-emerald-100 text-emerald-700 py-1 rounded-lg mb-2">${spot.type || 'Food'} - ${spot.count || '0'} jon</div>
+                            <div class="flex justify-center gap-2">
+                                <button onclick="window.handleVote('${spot.id}', 'real')" class="px-2 py-1 bg-emerald-50 rounded text-[10px] border border-emerald-200 hover:bg-emerald-100">👍 Real (${spot.realVotes || 0})</button>
+                                <button onclick="window.handleVote('${spot.id}', 'fake')" class="px-2 py-1 bg-red-50 rounded text-[10px] border border-red-200 hover:bg-red-100">👎 Fake (${spot.fakeVotes || 0})</button>
+                            </div>
                         </div>
                     `);
                     markersRef.current.push(marker);
                 });
             }, [activeSpots]);
 
+            // Vote Logic
+            useEffect(() => {
+                window.handleVote = async (id, type) => {
+                    if (localStorage.getItem(`voted_${id}`)) return alert("Apni ebare vote diye feleshen!");
+                    if (!window.fbSDK) return;
+                    
+                    const { db, appId, doc, updateDoc, increment } = window.fbSDK;
+                    const spotRef = doc(db, 'artifacts', appId, 'public', 'data', 'spots', id);
+                    try {
+                        await updateDoc(spotRef, { [type === 'real' ? 'realVotes' : 'fakeVotes']: increment(1) });
+                        localStorage.setItem(`voted_${id}`, 'true');
+                    } catch (e) { console.error(e); }
+                };
+            }, []);
+
             const addNewSpot = async () => {
-                if (!user) return alert("Please wait for authentication...");
-                if (!formData.name) return alert("Mosjid er nam likhun");
+                if (!formData.name) return alert("Nam likhun prothome!");
+                if (!user || !window.fbSDK) return alert("Please wait for authentication!");
                 
                 const { db, appId, collection, addDoc } = window.fbSDK;
-
                 try {
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'spots'), {
                         ...formData,
-                        createdAt: Date.now(),
+                        type: formData.type === 'Other' ? formData.manualItem : formData.type,
+                        realVotes: 0, 
+                        fakeVotes: 0, 
+                        createdAt: Date.now(), 
                         userId: user.uid
                     });
                     setIsModalOpen(false);
                     setPickingLocation(false);
-                    setFormData({ name: '', type: 'Biriyani', count: '', time: '18:00', description: '', lat: 23.8103, lng: 90.4125 });
-                } catch (e) {
-                    alert("Error saving spot: " + e.message);
+                    // Reset form
+                    setFormData({ name: '', type: 'Biriyani', manualItem: '', count: '', time: '18:00', description: '', lat: 23.8103, lng: 90.4125 });
+                } catch (e) { 
+                    console.error(e); 
+                    alert("Kichu ekta somossa hoyeche!");
                 }
             };
 
+            const filteredSpots = activeSpots.filter(s => 
+                s.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                (s.type && s.type.toLowerCase().includes(searchQuery.toLowerCase()))
+            );
+
             return (
-                <div className="h-screen w-screen flex flex-col bg-[#080808] relative">
+                <div className="h-screen w-screen flex flex-col bg-[#080808] relative overflow-hidden">
                     {isLoading && (
                         <div className="loading-screen">
-                            <span className="text-8xl animate-bounce mb-8">🕌</span>
-                            <p className="text-emerald-500 font-bold tracking-widest animate-pulse uppercase">Live Map Load Hocche...</p>
+                            <span className="text-8xl animate-bounce mb-8">🍛</span>
+                            <p className="text-emerald-500 font-bold animate-pulse uppercase tracking-widest">Live Map Load Hocche...</p>
                         </div>
                     )}
 
-                    {/* AI Smart Tip Overlay */}
+                    {/* AI Tip Bubble */}
                     {isAIChatOpen && (
                         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md p-4 bg-emerald-900/90 backdrop-blur-md rounded-2xl border border-emerald-500/30 shadow-2xl chat-bubble">
-                            <div className="flex justify-between items-start mb-2">
-                                <span className="text-xs font-black uppercase text-emerald-400">✨ AI Shohayok</span>
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">✨ AI SHOAYOK</span>
                                 <button onClick={() => setIsAIChatOpen(false)} className="text-white/50 hover:text-white">✕</button>
                             </div>
                             <p className="text-sm font-medium leading-relaxed">{aiTip}</p>
                         </div>
                     )}
 
-                    {/* Top Bar */}
-                    <header className={`p-4 z-20 transition-all ${pickingLocation ? 'hidden' : 'block'}`}>
-                        <div className="flex gap-3 bg-black/40 backdrop-blur-xl p-3 rounded-3xl border border-white/5 shadow-2xl items-center">
-                            <div className="bg-emerald-500 w-10 h-10 rounded-2xl flex items-center justify-center text-xl shadow-lg shadow-emerald-500/20">🍛</div>
+                    {/* Top Search Interface */}
+                    <header className={`p-4 z-20 transition-opacity duration-300 ${pickingLocation ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+                        <div className="flex gap-2 bg-black/50 backdrop-blur-xl p-2 rounded-full border border-white/5 items-center shadow-2xl">
+                            <div className="bg-emerald-500 w-10 h-10 rounded-full flex items-center justify-center shadow-lg text-xl">🍛</div>
                             <input 
-                                className="flex-1 bg-transparent outline-none text-sm font-bold placeholder:text-gray-600" 
-                                placeholder="Mosjid khujun..."
+                                className="flex-1 bg-transparent outline-none text-sm px-2 font-bold text-white placeholder:text-gray-600" 
+                                placeholder="Khujun (Mosjid/Item)..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
-                            <button onClick={getSmartTip} className="bg-white/5 p-2 rounded-xl hover:bg-white/10 transition-colors" title="AI Tips">
-                                ✨
-                            </button>
+                            <button onClick={getSmartTip} className="bg-white/10 w-10 h-10 rounded-full flex items-center justify-center transition-colors hover:bg-white/20">✨</button>
                         </div>
                     </header>
 
-                    {/* Map Container */}
+                    {/* Map Area */}
                     <div ref={mapRef} className="flex-1 relative z-10">
                         {pickingLocation && (
-                            <div className="absolute inset-0 pointer-events-none z-30 flex items-center justify-center">
-                                <div className="mb-10 text-emerald-500 animate-bounce drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]">
-                                    <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+                            <div className="absolute inset-0 pointer-events-none z-30 flex flex-col items-center justify-center">
+                                {/* Fixed Center Pin Indicator */}
+                                <div className="mb-20 text-emerald-500 animate-bounce drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
                                 </div>
-                                <div className="absolute bottom-10 left-1/2 -translate-x-1/2 pointer-events-auto bg-emerald-600 px-10 py-4 rounded-full font-black shadow-[0_10px_40px_rgba(16,185,129,0.4)] active:scale-95 transition-all text-white tracking-tight" onClick={addNewSpot}>
-                                    Ekhane Spot Rakhi
+                                
+                                {/* Location Confirmation UI */}
+                                <div className="absolute bottom-10 flex flex-col gap-3 w-full px-8 pointer-events-auto max-w-md">
+                                    <div className="bg-black/90 backdrop-blur-md p-4 rounded-3xl border border-white/10 text-center shadow-2xl">
+                                        <p className="text-[10px] text-gray-500 font-black uppercase mb-1 tracking-widest">Pin exact mosque position</p>
+                                        <h4 className="font-black truncate text-white text-lg">{formData.name || 'Set Location'}</h4>
+                                    </div>
+                                    <button 
+                                        onClick={addNewSpot} 
+                                        className="w-full bg-emerald-600 py-5 rounded-full font-black shadow-[0_10px_30px_rgba(16,185,129,0.4)] active:scale-95 transition-all text-white text-lg uppercase tracking-tight"
+                                    >
+                                        Ekhane Distribution Shuru
+                                    </button>
+                                    <button 
+                                        onClick={() => { setPickingLocation(false); setIsModalOpen(true); }} 
+                                        className="text-sm text-gray-500 font-bold hover:text-white transition-colors"
+                                    >
+                                        Cancel & Edit Info
+                                    </button>
                                 </div>
                             </div>
                         )}
                     </div>
 
                     {/* Action Buttons */}
-                    <div className={`fixed bottom-10 right-6 z-20 flex flex-col gap-4 ${pickingLocation ? 'hidden' : 'flex'}`}>
-                        <button 
-                            className="w-14 h-14 bg-emerald-600/20 backdrop-blur-md border border-emerald-500/20 rounded-3xl flex items-center justify-center shadow-2xl text-emerald-400"
-                            onClick={() => {
-                                if (mapInstance.current) mapInstance.current.locate({ setView: true, maxZoom: 16 });
-                            }}
-                        >
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+                    <div className={`fixed bottom-28 right-6 z-20 flex flex-col gap-4 ${pickingLocation ? 'hidden' : 'flex'}`}>
+                        <button className="w-14 h-14 bg-white/5 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center shadow-xl active:scale-90 transition-all group" onClick={() => mapInstance.current?.locate({ setView: true })}>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
                         </button>
-                        <button 
-                            className="w-16 h-16 bg-orange-600 rounded-[2rem] flex items-center justify-center shadow-2xl text-4xl font-bold transition-transform hover:rotate-90"
-                            onClick={() => setIsModalOpen(true)}
-                        >
-                            +
-                        </button>
+                        <button className="w-16 h-16 bg-orange-600 rounded-full flex items-center justify-center shadow-[0_10px_30px_rgba(234,88,12,0.4)] text-4xl font-bold active:scale-90 transition-all hover:rotate-90" onClick={() => setIsModalOpen(true)}>+</button>
                     </div>
 
-                    {/* Add Modal */}
+                    {/* Bottom List Sheet */}
+                    <div className={`fixed inset-x-0 bottom-0 z-40 bg-[#0c0c0c] border-t border-white/5 rounded-t-[2.5rem] transition-all duration-500 ease-out flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,1)] ${isBottomSheetOpen ? 'h-[75vh]' : 'h-24'} ${pickingLocation ? 'translate-y-full' : ''}`}>
+                        <div onClick={() => setIsBottomSheetOpen(!isBottomSheetOpen)} className="w-full flex flex-col items-center py-4 cursor-pointer active:bg-white/5">
+                            <div className="w-10 h-1 bg-white/20 rounded-full mb-3"></div>
+                            <div className="flex justify-between w-full px-8 items-center">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-black text-emerald-500 text-sm uppercase tracking-wider">Nearby Distribution</span>
+                                    <span className="bg-emerald-900/50 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-bold">{filteredSpots.length} ta</span>
+                                </div>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className={`transition-transform duration-300 ${isBottomSheetOpen ? 'rotate-180' : ''}`}><path d="m18 15-6-6-6 6"/></svg>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto px-6 pb-10 hide-scrollbar">
+                            {filteredSpots.length === 0 ? (
+                                <div className="text-center py-20 opacity-20 font-bold">Kono active spot pawa jayni</div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {filteredSpots.map(spot => (
+                                        <div key={spot.id} onClick={() => { mapInstance.current?.flyTo([spot.lat, spot.lng], 17); setIsBottomSheetOpen(false); }} className="bg-white/5 p-4 rounded-[2rem] border border-white/5 flex gap-4 items-center active:bg-white/10 transition-all cursor-pointer">
+                                            <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-2xl shrink-0">🕌</div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <h4 className="font-bold text-white truncate text-base tracking-tight">{spot.name}</h4>
+                                                    <span className="text-[10px] font-black text-emerald-400 uppercase bg-emerald-500/10 px-2 py-0.5 rounded-md">{spot.type}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-[11px] text-gray-500 font-bold uppercase tracking-widest">
+                                                    <span>{spot.count} jon • {spot.time}</span>
+                                                    <div className="flex gap-2">
+                                                        <span className="text-emerald-400">👍 {spot.realVotes || 0}</span>
+                                                        <span className="text-red-400">👎 {spot.fakeVotes || 0}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Spot Info Modal */}
                     {isModalOpen && (
-                        <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-6 backdrop-blur-lg animate-in fade-in duration-200">
-                            <div className="bg-[#121212] w-full max-w-sm p-8 rounded-[3rem] border border-white/5 shadow-2xl relative">
-                                <button className="absolute top-6 right-8 text-gray-500 text-xl" onClick={() => setIsModalOpen(false)}>✕</button>
-                                <h3 className="text-2xl font-black mb-6 tracking-tight">Spot Info ✨</h3>
-                                
+                        <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-6 backdrop-blur-lg animate-in fade-in duration-300">
+                            <div className="bg-[#121212] w-full max-w-sm p-8 rounded-[3.5rem] border border-white/5 shadow-2xl relative">
+                                <button className="absolute top-8 right-8 text-gray-500 text-2xl hover:text-white" onClick={() => setIsModalOpen(false)}>✕</button>
+                                <h3 className="text-2xl font-black mb-8 tracking-tighter text-white">Distribution Info</h3>
                                 <div className="space-y-4">
-                                    <input 
-                                        className="w-full bg-black p-4 rounded-2xl border border-white/5 outline-none font-bold placeholder:text-gray-700" 
-                                        placeholder="Masjid-er Nam"
-                                        value={formData.name}
-                                        onChange={(e) => setFormData({...formData, name: e.target.value})}
-                                    />
-                                    
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-gray-600 uppercase ml-3">Mosjid Name</label>
+                                        <input className="w-full bg-black p-4 rounded-2xl border border-white/5 outline-none font-bold text-white placeholder:text-gray-700 focus:ring-1 focus:ring-emerald-500/30 transition-all" placeholder="যেমন: ধানমণ্ডি কেন্দ্রীয় মসজিদ" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+                                    </div>
                                     <div className="grid grid-cols-2 gap-3">
-                                        <select className="bg-black p-4 rounded-2xl outline-none border border-white/5 text-white font-bold" value={formData.type} onChange={(e) => setFormData({...formData, type: e.target.value})}>
-                                            <option value="Biriyani">Biriyani</option>
-                                            <option value="Khichuri">Khichuri</option>
-                                            <option value="Haleem">Haleem</option>
-                                            <option value="Tehari">Tehari</option>
-                                        </select>
-                                        <input type="number" placeholder="Jon-er Shonkha" className="bg-black p-4 rounded-2xl outline-none border border-white/5 text-white font-bold" onChange={(e) => setFormData({...formData, count: e.target.value})} />
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-gray-600 uppercase ml-3">Menu</label>
+                                            <select className="w-full bg-black p-4 rounded-2xl outline-none border border-white/5 text-white font-bold appearance-none" value={formData.type} onChange={(e) => setFormData({...formData, type: e.target.value})}>
+                                                <option value="Biriyani">Biriyani</option>
+                                                <option value="Khichuri">Khichuri</option>
+                                                <option value="Haleem">Haleem</option>
+                                                <option value="Other">Other (Likhi)</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-gray-600 uppercase ml-3">Count</label>
+                                            <input type="number" placeholder="১০০" className="w-full bg-black p-4 rounded-2xl outline-none border border-white/5 text-white font-bold" value={formData.count} onChange={(e) => setFormData({...formData, count: e.target.value})} />
+                                        </div>
                                     </div>
-
-                                    <div className="flex gap-2 items-center bg-black rounded-2xl border border-white/5 p-2 pr-4">
-                                        <input 
-                                            className="flex-1 bg-transparent p-2 outline-none text-xs font-medium text-gray-300" 
-                                            placeholder="AI Barta generate kora jay..."
-                                            value={formData.description}
-                                            onChange={(e) => setFormData({...formData, description: e.target.value})}
-                                        />
-                                        <button 
-                                            onClick={generateAIDescription}
-                                            disabled={isGenerating}
-                                            className="bg-emerald-600/20 text-emerald-400 px-3 py-1.5 rounded-xl text-[10px] font-black hover:bg-emerald-600/30 transition-all disabled:opacity-50"
-                                        >
-                                            {isGenerating ? "✨..." : "✨ Barta Likhun"}
-                                        </button>
+                                    {formData.type === 'Other' && (
+                                        <input className="w-full bg-emerald-900/20 p-4 rounded-2xl border border-emerald-500/20 outline-none font-black text-emerald-400 animate-in slide-in-from-top-2" placeholder="Iftar Item Er Nam Likhun" value={formData.manualItem} onChange={(e) => setFormData({...formData, manualItem: e.target.value})} />
+                                    )}
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-gray-600 uppercase ml-3">Invitation (AI)</label>
+                                        <div className="flex gap-2 items-center bg-black rounded-2xl border border-white/5 p-2 pr-4">
+                                            <input className="flex-1 bg-transparent p-2 outline-none text-[11px] text-gray-400" placeholder="AI invitation generate korun..." value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
+                                            <button onClick={generateAIDescription} disabled={isGenerating} className="bg-emerald-600/20 text-emerald-400 px-4 py-2 rounded-xl text-[10px] font-black hover:bg-emerald-600/40 disabled:opacity-50 transition-all">{isGenerating ? '...' : '✨ AI'}</button>
+                                        </div>
                                     </div>
-
-                                    <div className="flex items-center gap-3">
-                                        <label className="text-xs font-bold text-gray-500 uppercase ml-2">Somoy:</label>
-                                        <input type="time" className="bg-black p-3 rounded-xl flex-1 outline-none border border-white/5 text-white font-bold" value={formData.time} onChange={(e) => setFormData({...formData, time: e.target.value})} />
+                                    <div className="flex items-center gap-3 bg-black p-1 rounded-2xl border border-white/5">
+                                        <label className="text-[10px] text-gray-500 font-black uppercase ml-3 shrink-0">Dist. Time:</label>
+                                        <input type="time" className="flex-1 bg-transparent p-4 rounded-xl outline-none text-white font-bold" value={formData.time} onChange={(e) => setFormData({...formData, time: e.target.value})} />
                                     </div>
                                 </div>
-
                                 <button 
-                                    className="w-full bg-emerald-600 py-5 rounded-[1.5rem] font-black text-lg shadow-xl shadow-emerald-500/20 mt-8 active:scale-95 transition-all"
-                                    onClick={() => { setIsModalOpen(false); setPickingLocation(true); }}
+                                    className="w-full bg-emerald-600 py-6 rounded-full font-black text-lg mt-10 active:scale-95 transition-all shadow-xl shadow-emerald-900/40 hover:bg-emerald-500" 
+                                    onClick={() => { 
+                                        if(!formData.name) return alert("Age mosjid er nam likhun!");
+                                        setIsModalOpen(false); 
+                                        setPickingLocation(true); 
+                                    }}
                                 >
-                                    Map-e Location dekhai
+                                    Location Set Korun
                                 </button>
                             </div>
                         </div>
