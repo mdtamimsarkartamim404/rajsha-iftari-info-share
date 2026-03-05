@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Biriyani Dibe Official - Live Map</title>
+    <title>Rajshahi Real Iftar Map</title>
     
-    <!-- CDNs -->
+    <!-- Scripts & Stylesheets -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -20,968 +20,358 @@
         
         body {
             font-family: 'Hind Siliguri', sans-serif;
-            background-color: #080808;
-            color: white;
             margin: 0;
-            overflow: hidden;
+            background-color: #000;
         }
 
-        .mosjid-marker-pin {
-            width: 44px; height: 44px; border-radius: 12px 12px 12px 2px;
-            transform: rotate(-45deg); display: flex; align-items: center; justify-content: center;
-            background: #10b981; border: 2px solid white; box-shadow: 0 4px 15px rgba(16,185,129,0.4);
-        }
-        .mosjid-marker-pin svg { transform: rotate(45deg); }
+        .custom-scrollbar::-webkit-scrollbar { width: 0px; }
+        .leaflet-popup-content-wrapper { border-radius: 1.5rem !important; padding: 0 !important; overflow: hidden; }
+        .leaflet-popup-content { margin: 0 !important; width: auto !important; }
+        .leaflet-container { background: #111 !important; }
         
-        .user-marker {
-            width: 16px; height: 16px; background: #3b82f6; border: 3px solid white;
-            border-radius: 50%; box-shadow: 0 0 15px #3b82f6;
-            animation: pulse 2s infinite;
+        @keyframes pulse-blue {
+            0% { transform: scale(0.95); opacity: 0.7; }
+            50% { transform: scale(1.2); opacity: 0.3; }
+            100% { transform: scale(0.95); opacity: 0.7; }
         }
-
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.5); opacity: 0.5; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        .leaflet-popup-content-wrapper { border-radius: 1.5rem; background: white; color: black; padding: 0; }
-        .leaflet-container { background: #080808 !important; }
-        
-        .loading-screen {
-            position: fixed; inset: 0; background: #080808; z-index: 100;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-        }
-
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-        /* লোকেশন পিকারের জন্য স্টাইল */
-        .center-pin {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -100%);
-            z-index: 1000;
-            pointer-events: none;
-            text-shadow: 0 0 20px rgba(16, 185, 129, 0.8);
-        }
-
-        .temp-marker {
-            background: transparent;
-        }
-        
-        /* আদব কার্ডের জন্য স্টাইল */
-        .adab-card {
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(0, 0, 0, 0.9));
-            border-left: 4px solid #10b981;
-            backdrop-filter: blur(10px);
-        }
-        
-        /* জুম কন্ট্রোল কাস্টমাইজ */
-        .leaflet-control-zoom {
-            border: none !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important;
-        }
-        
-        .leaflet-control-zoom a {
-            background-color: #1a1a1a !important;
-            color: #10b981 !important;
-            border: 1px solid #333 !important;
-            width: 40px !important;
-            height: 40px !important;
-            line-height: 40px !important;
-            font-size: 20px !important;
-        }
-        
-        .leaflet-control-zoom a:hover {
-            background-color: #10b981 !important;
-            color: white !important;
-        }
-        
-        /* গুগল ম্যাপ স্টাইল টাইলস */
-        .leaflet-tile {
-            filter: brightness(0.8) contrast(1.2);
-        }
-        
-        /* লাইক/ডিসলাইক বাটনের জন্য স্টাইল */
-        .vote-button {
-            transition: all 0.2s ease;
-        }
-        .vote-button:hover {
-            transform: scale(1.1);
-        }
-        .vote-button:active {
-            transform: scale(0.95);
-        }
-        
-        /* সার্চ সাজেশন বক্স */
-        .search-suggestion {
-            background: rgba(0, 0, 0, 0.95);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        
-        .search-suggestion-item {
-            transition: all 0.2s ease;
-        }
-        
-        .search-suggestion-item:hover {
-            background: rgba(16, 185, 129, 0.2);
-        }
+        .user-location-pulse { animation: pulse-blue 2s infinite; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <script>
-        // ডেমো ডাটা
-        window.DEMO_MODE = true;
-        window.DEMO_SPOTS = [
-            {
-                id: '1',
-                name: 'রাজশাহী কেন্দ্রীয় মসজিদ',
-                type: 'Biriyani',
-                time: '১৮:৩০',
-                description: 'আজকের ইফতারে বিশেষ বিরিয়ানি',
-                lat: 24.3636,
-                lng: 88.6001,
-                realVotes: 45,
-                fakeVotes: 2,
-                createdAt: Date.now()
-            },
-            {
-                id: '2',
-                name: 'তালাইমারী মসজিদ',
-                type: 'Khichuri',
-                time: '১৮:১৫',
-                description: 'গরম গরম খিচুড়ি বিতরণ',
-                lat: 24.3736,
-                lng: 88.5901,
-                realVotes: 78,
-                fakeVotes: 5,
-                createdAt: Date.now()
-            },
-            {
-                id: '3',
-                name: 'বড় কুঠি মসজিদ',
-                type: 'Haleem',
-                time: '১৮:৪৫',
-                description: 'বিশেষ হালিম ইফতার',
-                lat: 24.3536,
-                lng: 88.6101,
-                realVotes: 32,
-                fakeVotes: 1,
-                createdAt: Date.now()
-            }
-        ];
-        
-        // ইফতার ও মসজিদের আদব - ২০ টি
-        window.ADAB_LIST = [
-            { id: 1, bn: "দ্রুত ইফতার: সূর্যাস্ত হওয়া মাত্র দেরি না করে দ্রুত ইফতার করা সুন্নত।" },
-            { id: 2, bn: "সুন্নত শুরু: বিজোড় সংখ্যক খেজুর অথবা পানি দিয়ে ইফতার শুরু করুন।" },
-            { id: 3, bn: "ইফতারের দোয়া: ذَهَبَ الظَّمَأُ وَابْتَلَّتِ الْعُرُوقُ وَثَبَتَ الأَجْرُ إِنْ شَاءَ اللَّهُ - জাহাবায জামাউ ওয়াবতাল্লাতিল উরূকু ওয়া সাবাতাল আজরু ইনশাআল্লাহ।" },
-            { id: 4, bn: "বেশি দোয়া: ইফতারের সময় দোয়া কবুল হয়, তাই মনে মনে বেশি বেশি দোয়া করুন।" },
-            { id: 5, bn: "পরিচ্ছন্নতা: উচ্ছিষ্ট, ওয়ান টাইম প্লেট ও বোতল ডাস্টবিনে ফেলুন।" },
-            { id: 6, bn: "মেঝে রক্ষা: সতর্ক থাকুন যেন মেঝে বা কার্পেটে খাবার ও পানীয় না পড়ে।" },
-            { id: 7, bn: "পরিমিত আহার: অতিরিক্ত না খেয়ে মাগরিবের জামাতের জন্য দ্রুত প্রস্তুত হোন।" },
-            { id: 8, bn: "অপচয় রোধ: খাবার বা পানি অপচয় করবেন না; যতটুকু প্রয়োজন ঠিক ততটুকুই নিন।" },
-            { id: 9, bn: "স্থান পরিষ্কার: ইফতার শেষে নিজের বসার স্থানটি নিজ দায়িত্বে পরিষ্কার করুন।" },
-            { id: 10, bn: "অন্যকে সাহায্য: বৃদ্ধ বা অসুস্থ কাউকে ইফতারি পেতে বা স্থান পরিষ্কারে সাহায্য করুন।" },
-            { id: 11, bn: "শান্ত থাকা: উচ্চস্বরে কথা বা হাসাহাসি না করে মসজিদের গাম্ভীর্য বজায় রাখুন।" },
-            { id: 12, bn: "কাতার সোজা: দস্তরখান এমনভাবে বিছান যেন চলাচলের পথ ও কাতার সোজা করতে সুবিধা হয়।" },
-            { id: 13, bn: "মোবাইল সাইলেন্ট: ইফতার ও নামাজের সময় মোবাইল ফোনটি বন্ধ বা সাইলেন্ট রাখুন।" },
-            { id: 14, bn: "ধৈর্য ধারণ: ইফতারি বিতরণে দেরি হলে বা পছন্দমতো না হলে ধৈর্য ধরুন।" },
-            { id: 15, bn: "অল্পতে তুষ্টি: যা পরিবেশন করা হয়েছে তা নিয়েই সন্তুষ্ট থাকুন, অভিযোগ করবেন না।" },
-            { id: 16, bn: "দ্রুত প্রস্তুতি: ইফতার শেষে দ্রুত হাত-মুখ ধুয়ে নামাজের প্রস্তুতি নিন।" },
-            { id: 17, bn: "মুখ পরিষ্কার: খাওয়ার পর ভালোভাবে কুলি করুন যাতে নামাজের সময় দুর্গন্ধ না হয়।" },
-            { id: 18, bn: "স্বেচ্ছাসেবক হওয়া: দস্তরখান বিছানো বা খাবার বিতরণে অন্যদের সাহায্য করুন।" },
-            { id: 19, bn: "খাবারে ফুঁ না দেওয়া: গরম ইফতারিতে ফুঁ দেবেন না, এটি রাসূলুল্লাহ (সা.)-এর নিষেধ।" },
-            { id: 20, bn: "দস্তরখান গুছানো: ইফতার শেষে সম্মিলিতভাবে দস্তরখান গুছিয়ে নির্দিষ্ট স্থানে রাখুন।" }
-        ];
-        
-        // বাংলাদেশের মসজিদের ডাটা (সার্চের জন্য)
-        window.MOSJID_LIST = [
-            { name: 'রাজশাহী কেন্দ্রীয় মসজিদ', lat: 24.3636, lng: 88.6001, address: 'রাজশাহী বিশ্ববিদ্যালয় সংলগ্ন' },
-            { name: 'বাইতুল মোকাররম', lat: 23.7295, lng: 90.4115, address: 'পল্টন, ঢাকা' },
-            { name: 'ধানমণ্ডি কেন্দ্রীয় মসজিদ', lat: 23.8103, lng: 90.4125, address: 'ধানমণ্ডি ৩২, ঢাকা' },
-            { name: 'মোহাম্মদপুর কেন্দ্রীয় মসজিদ', lat: 23.7603, lng: 90.3625, address: 'মোহাম্মদপুর, ঢাকা' },
-            { name: 'তালাইমারী মসজিদ', lat: 24.3736, lng: 88.5901, address: 'তালাইমারী, রাজশাহী' },
-            { name: 'বড় কুঠি মসজিদ', lat: 24.3536, lng: 88.6101, address: 'বড় কুঠি, রাজশাহী' },
-            { name: 'চট্টগ্রাম কেন্দ্রীয় মসজিদ', lat: 22.3569, lng: 91.7832, address: 'আন্দরকিল্লা, চট্টগ্রাম' },
-            { name: 'সিলেট কেন্দ্রীয় মসজিদ', lat: 24.8949, lng: 91.8687, address: 'সিলেট শহর' },
-            { name: 'খুলনা কেন্দ্রীয় মসজিদ', lat: 22.8456, lng: 89.5403, address: 'খুলনা শহর' },
-            { name: 'বরিশাল কেন্দ্রীয় মসজিদ', lat: 22.7010, lng: 90.3535, address: 'বরিশাল শহর' },
-            { name: 'কাকরাইল মসজিদ', lat: 23.7385, lng: 90.4173, address: 'কাকরাইল, ঢাকা' },
-            { name: 'গুলশান কেন্দ্রীয় মসজিদ', lat: 23.7925, lng: 90.4152, address: 'গুলশান, ঢাকা' },
-            { name: 'বনানী মসজিদ', lat: 23.7957, lng: 90.4055, address: 'বনানী, ঢাকা' },
-            { name: 'উত্তরা কেন্দ্রীয় মসজিদ', lat: 23.8761, lng: 90.3794, address: 'উত্তরা, ঢাকা' },
-            { name: 'মিরপুর কেন্দ্রীয় মসজিদ', lat: 23.7855, lng: 90.3605, address: 'মিরপুর, ঢাকা' }
-        ];
-    </script>
-
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
+        // UI Icons definition - Fixed missing components to resolve React Error #130
+        const Icons = {
+            MapPin: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>,
+            MapIcon: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>,
+            Plus: () => <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14m-7-7v14"/></svg>,
+            Navigation: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>,
+            X: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>,
+            ThumbsUp: () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 10v12M15 5.88s-1.33-3.95-3.67-4.51a1.21 1.21 0 0 0-1.45 1.05c-.08.6-.13 1.28-.13 2.02 0 2.05-1.08 4.09-2.69 5.2a1.24 1.24 0 0 0-.06 1.94l6.03 6c.47.47 1.1.71 1.74.71H19a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-3.48c.14-.65.25-1.37.25-2.12a5.5 5.5 0 0 0-1.27-3.44z"/></svg>,
+            ThumbsDown: () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 14V2M9 18.12s1.33 3.95 3.67 4.51c.39.09.81-.01 1.1-.3a1.2 1.2 0 0 0 .35-.75c.08-.6.13-1.28.13-2.02 0-2.05 1.08-4.09 2.69-5.2a1.24 1.24 0 0 0 .06-1.94l-6.03-6a2.43 2.43 0 0 0-1.74-.71H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3.48c-.14.65-.25 1.37-.25 2.12a5.5 5.5 0 0 0 1.27 3.44z"/></svg>,
+            Info: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>,
+            Locate: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="2" x2="5" y1="12" y2="12"/><line x1="19" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="5"/><line x1="12" x2="12" y1="19" y2="22"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/></svg>,
+            Check: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>,
+            Layers: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        };
+
         const App = () => {
             const [activeSpots, setActiveSpots] = useState([]);
-            const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
             const [isModalOpen, setIsModalOpen] = useState(false);
+            const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
             const [pickingLocation, setPickingLocation] = useState(false);
-            const [isLoading, setIsLoading] = useState(true);
-            const [searchQuery, setSearchQuery] = useState("");
             const [selectedLocation, setSelectedLocation] = useState(null);
-            const [tempMarker, setTempMarker] = useState(null);
-            const [currentAdabs, setCurrentAdabs] = useState([]);
-            const [autoLocation, setAutoLocation] = useState(null);
-            const [locationInput, setLocationInput] = useState("");
+            const [currentAdab, setCurrentAdab] = useState("");
             const [userVotes, setUserVotes] = useState({});
-            const [searchSuggestions, setSearchSuggestions] = useState([]);
-            const [showSuggestions, setShowSuggestions] = useState(false);
-            
-            // রাজশাহীর ডিফল্ট কোঅর্ডিনেট
-            const RAJSHAHI_COORDS = { lat: 24.3636, lng: 88.6001 };
-            
-            const [formData, setFormData] = useState({
-                name: '', type: 'Biriyani', manualItem: '', time: '18:00', description: '', lat: RAJSHAHI_COORDS.lat, lng: RAJSHAHI_COORDS.lng
-            });
+            const [showSuccess, setShowSuccess] = useState(false);
+            const [formData, setFormData] = useState({ name: '', type: 'বিরিয়ানি', manualItem: '', time: '18:30', description: '' });
 
             const mapRef = useRef(null);
             const mapInstance = useRef(null);
-            const markersRef = useRef([]);
+            const markersRef = useRef({});
+            const tempMarkerRef = useRef(null);
             const userMarkerRef = useRef(null);
-            const searchInputRef = useRef(null);
 
-            // ডেমো ডাটা লোড করা
+            const RAJSHAHI_COORDS = [24.3636, 88.6001];
+
+            const ADABS = [
+                "দ্রুত ইফতার: সূর্যাস্ত হওয়া মাত্র দেরি না করে দ্রুত ইফতার করা সুন্নত।",
+                "সুন্নত শুরু: ইফতারের শুরু-তে বিজোড় সংখ্যক খেজুর বা পানি খাওয়া সুন্নত।",
+                "স্বাস্থ্যকর খাবার: ভাজাপোড়া কম খেয়ে বেশি করে ফল ও সবজি খান।",
+                "পানি পান: ইফতারের পর থেকে সেহরি পর্যন্ত পরিমিত পানি পান করুন।",
+                "দোয়া কবুল: ইফতারের ঠিক আগের সময়টুকু দোয়া কবুলের সেরা সময়।",
+                "পরিচ্ছন্নতা: মসজিদে ইফতার করলে থালা-বাসন নির্দিষ্ট স্থানে রাখুন।",
+                "সেহরির সময়: সেহরি শেষ সময়ে খাওয়া সুন্নত, এতে শরীরে শক্তি থাকে।",
+                "পেট ঠান্ডা: একসাথে বেশি না খেয়ে বিরতি দিয়ে খাবার খান।",
+                "সম্প্রীতি: ইফতারের সময় পাড়া-প্রতিবেশীর খোঁজ নিন ও মিলেমিশে করুন।",
+                "আদব: নামাজের সময় ফোন সাইলেন্ট রাখুন যাতে অন্যের সমস্যা না হয়।"
+            ];
+
             useEffect(() => {
-                if (window.DEMO_MODE) {
-                    setActiveSpots(window.DEMO_SPOTS);
-                    setIsLoading(false);
-                }
+                const savedVotes = localStorage.getItem('iftar_map_votes');
+                if (savedVotes) setUserVotes(JSON.parse(savedVotes));
+
+                setCurrentAdab(ADABS[Math.floor(Math.random() * ADABS.length)]);
+                const adabInterval = setInterval(() => {
+                    setCurrentAdab(ADABS[Math.floor(Math.random() * ADABS.length)]);
+                }, 15000);
+
+                const checkReset = () => {
+                    const now = new Date();
+                    setActiveSpots(prev => prev.filter(spot => {
+                        const spotDate = new Date(spot.createdAt);
+                        const spotIftarTime = spot.time.split(':');
+                        const resetTime = new Date(spotDate);
+                        resetTime.setHours(parseInt(spotIftarTime[0]), parseInt(spotIftarTime[1]), 0, 0);
+                        const diffInHours = (now - resetTime) / (1000 * 60 * 60);
+                        return diffInHours < 12 && diffInHours > -12;
+                    }));
+                };
                 
-                // লোকাল স্টোরেজ থেকে ভোট লোড করা
-                const savedVotes = localStorage.getItem('userVotes');
-                if (savedVotes) {
-                    setUserVotes(JSON.parse(savedVotes));
-                }
-                
-                // প্রতি ৩০ সেকেন্ডে নতুন আদব দেখাবে
-                const interval = setInterval(() => {
-                    updateAdab();
-                }, 30000);
-                
-                // প্রথমবার আদব দেখাও
-                updateAdab();
-                
-                return () => clearInterval(interval);
+                checkReset();
+                const interval = setInterval(checkReset, 60000);
+                return () => { clearInterval(interval); clearInterval(adabInterval); };
             }, []);
-            
-            // র‍্যান্ডম ২ টি আদব সিলেক্ট করার ফাংশন
-            const updateAdab = () => {
-                const adabs = window.ADAB_LIST;
-                const shuffled = [...adabs].sort(() => 0.5 - Math.random());
-                const selected = shuffled.slice(0, 2);
-                setCurrentAdabs(selected);
+
+            const handleVote = (id, type) => {
+                if (userVotes[id]) return;
+                setActiveSpots(prev => prev.map(s => {
+                    if (s.id === id) {
+                        const voteKey = type === 'real' ? 'realVotes' : 'fakeVotes';
+                        return { ...s, [voteKey]: (s[voteKey] || 0) + 1 };
+                    }
+                    return s;
+                }));
+                const newVotes = { ...userVotes, [id]: type };
+                setUserVotes(newVotes);
+                localStorage.setItem('iftar_map_votes', JSON.stringify(newVotes));
             };
 
-            // ম্যাপ ইনিশিয়ালাইজ - রাজশাহীতে ডিফল্ট সেন্টার
+            window.handleMapVote = (id, type) => handleVote(id, type);
+
             useEffect(() => {
                 if (!mapRef.current || mapInstance.current) return;
                 
-                console.log("ম্যাপ ইনিশিয়ালাইজ হচ্ছে...");
-                
-                mapInstance.current = L.map(mapRef.current, { 
-                    zoomControl: true,
-                    attributionControl: false,
-                    zoomSnap: 0.5,
-                    wheelPxPerZoomLevel: 120
-                }).setView([RAJSHAHI_COORDS.lat, RAJSHAHI_COORDS.lng], 13);
-                
-                // গুগল ম্যাপ স্টাইলের টাইলস
-                L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+                mapInstance.current = L.map(mapRef.current, {
+                    zoomControl: false,
+                    attributionControl: false
+                }).setView(RAJSHAHI_COORDS, 16);
+
+                L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
                     maxZoom: 20,
-                    subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
+                    subdomains:['mt0','mt1','mt2','mt3']
                 }).addTo(mapInstance.current);
 
-                // ইউজার লোকেশন ট্র্যাক
-                mapInstance.current.locate({ 
-                    setView: true,
-                    watch: true, 
-                    maxZoom: 16,
-                    enableHighAccuracy: true
-                });
-                
                 mapInstance.current.on('locationfound', (e) => {
-                    console.log("অটো লোকেশন পাওয়া গেছে:", e.latlng);
-                    setAutoLocation(e.latlng);
-                    
                     if (userMarkerRef.current) userMarkerRef.current.remove();
-                    
                     userMarkerRef.current = L.marker(e.latlng, {
-                        icon: L.divIcon({ 
+                        icon: L.divIcon({
                             className: 'user-marker',
-                            html: '<div style="width: 16px; height: 16px; background: #3b82f6; border: 3px solid white; border-radius: 50%;"></div>',
-                            iconSize: [16, 16] 
+                            html: `<div class="relative flex items-center justify-center">
+                                    <div class="absolute w-12 h-12 bg-blue-500 rounded-full user-location-pulse"></div>
+                                    <div class="relative w-4 h-4 bg-blue-600 border-2 border-white rounded-full shadow-2xl"></div>
+                                   </div>`,
+                            iconSize: [40, 40]
                         })
                     }).addTo(mapInstance.current);
                 });
-
-                mapInstance.current.on('locationerror', (e) => {
-                    console.log("লোকেশন এরর:", e);
-                });
-
-                setIsLoading(false);
             }, []);
-            
-            // লোকেশন পিকিং মোডে সার্চ কোয়েরি পরিবর্তন হলে সাজেশন আপডেট
-            useEffect(() => {
-                if (pickingLocation && searchQuery.length > 1) {
-                    const filtered = window.MOSJID_LIST.filter(m => 
-                        m.name.toLowerCase().includes(searchQuery.toLowerCase())
-                    );
-                    setSearchSuggestions(filtered.slice(0, 7));
-                    setShowSuggestions(true);
-                } else {
-                    setSearchSuggestions([]);
-                    setShowSuggestions(false);
-                }
-            }, [searchQuery, pickingLocation]);
-            
-            // সার্চ সাজেশন সিলেক্ট করার ফাংশন
-            const selectSuggestion = (mosjid) => {
-                setSearchQuery(mosjid.name);
-                setShowSuggestions(false);
-                
-                // ম্যাপের ভিউ সেখানে সেট করুন
-                mapInstance.current.setView([mosjid.lat, mosjid.lng], 18);
-                
-                // আগের টেম্প মার্কার সরান
-                if (tempMarker) {
-                    mapInstance.current.removeLayer(tempMarker);
-                }
-                
-                // নতুন টেম্প মার্কার দেখান
-                const newMarker = L.marker([mosjid.lat, mosjid.lng], {
-                    icon: L.divIcon({
-                        className: 'temp-marker',
-                        html: '<div style="width: 40px; height: 40px; background: #10b981; border: 4px solid white; border-radius: 50%; box-shadow: 0 0 30px #10b981; animation: pulse 1s infinite;"></div>',
-                        iconSize: [40, 40]
-                    })
-                }).addTo(mapInstance.current);
-                
-                setTempMarker(newMarker);
-                setSelectedLocation({ lat: mosjid.lat, lng: mosjid.lng });
-                
-                // ফর্ম ডাটা আপডেট
-                setFormData(prev => ({ 
-                    ...prev, 
-                    lat: mosjid.lat, 
-                    lng: mosjid.lng,
-                    name: mosjid.name // অটো মসজিদের নাম সেট করা
-                }));
-                
-                // কীবোর্ড ফোকাস সরানো
-                if (searchInputRef.current) {
-                    searchInputRef.current.blur();
-                }
-            };
-            
-            // গুগল ম্যাপ লিংক থেকে লোকেশন পার্স করার ফাংশন
-            const parseGoogleMapsLink = (url) => {
-                try {
-                    console.log("পার্স করার চেষ্টা:", url);
-                    
-                    let lat = null, lng = null;
-                    
-                    // ১. @ ফরম্যাট: @24.3636,88.6001,15z
-                    const atMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-                    if (atMatch) {
-                        lat = parseFloat(atMatch[1]);
-                        lng = parseFloat(atMatch[2]);
-                    }
-                    
-                    // ২. /place/ ফরম্যাট
-                    const placeMatch = url.match(/\/place\/[^\/]+\/(-?\d+\.\d+),(-?\d+\.\d+)/);
-                    if (placeMatch) {
-                        lat = parseFloat(placeMatch[1]);
-                        lng = parseFloat(placeMatch[2]);
-                    }
-                    
-                    // ৩. q= ফরম্যাট
-                    const qMatch = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
-                    if (qMatch) {
-                        lat = parseFloat(qMatch[1]);
-                        lng = parseFloat(qMatch[2]);
-                    }
-                    
-                    // ৪. 3d/4d ফরম্যাট
-                    const d3dMatch = url.match(/3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
-                    if (d3dMatch) {
-                        lat = parseFloat(d3dMatch[1]);
-                        lng = parseFloat(d3dMatch[2]);
-                    }
-                    
-                    if (lat && lng) {
-                        return { lat, lng };
-                    }
-                    
-                } catch (e) {
-                    console.error("লিংক পার্স করতে সমস্যা:", e);
-                }
-                return null;
-            };
 
-            // লোকেশন পিকিং মোড
             useEffect(() => {
                 if (!mapInstance.current) return;
-                
-                if (pickingLocation) {
-                    console.log("লোকেশন পিকিং মোড চালু");
-                    
-                    if (tempMarker) {
-                        mapInstance.current.removeLayer(tempMarker);
-                        setTempMarker(null);
-                    }
-                    
-                    setSelectedLocation(null);
-                    
-                    const handleMapClick = (e) => {
-                        console.log("ম্যাপে ক্লিক করা হয়েছে:", e.latlng);
-                        
-                        if (tempMarker) {
-                            mapInstance.current.removeLayer(tempMarker);
-                        }
-                        
-                        const newMarker = L.marker(e.latlng, {
+                const onMapClick = (e) => {
+                    if (pickingLocation) {
+                        if (tempMarkerRef.current) tempMarkerRef.current.remove();
+                        setSelectedLocation(e.latlng);
+                        tempMarkerRef.current = L.marker(e.latlng, {
                             icon: L.divIcon({
                                 className: 'temp-marker',
-                                html: '<div style="width: 40px; height: 40px; background: #10b981; border: 4px solid white; border-radius: 50%; box-shadow: 0 0 30px #10b981; animation: pulse 1s infinite;"></div>',
-                                iconSize: [40, 40]
+                                html: `<div class="w-14 h-14 bg-white rounded-full border-4 border-emerald-500 shadow-2xl flex items-center justify-center text-2xl animate-bounce">📍</div>`,
+                                iconSize: [56, 56],
+                                iconAnchor: [28, 56]
                             })
                         }).addTo(mapInstance.current);
-                        
-                        setTempMarker(newMarker);
-                        setSelectedLocation(e.latlng);
-                        
-                        setFormData(prev => ({ 
-                            ...prev, 
-                            lat: e.latlng.lat, 
-                            lng: e.latlng.lng 
-                        }));
-                    };
-                    
-                    mapInstance.current.on('click', handleMapClick);
-                    
-                    return () => {
-                        mapInstance.current.off('click', handleMapClick);
-                        if (tempMarker) {
-                            mapInstance.current.removeLayer(tempMarker);
-                        }
-                    };
-                }
+                        mapInstance.current.flyTo(e.latlng, 18);
+                    }
+                };
+                mapInstance.current.on('click', onMapClick);
+                return () => mapInstance.current.off('click', onMapClick);
             }, [pickingLocation]);
 
-            // মার্কার রেন্ডার
             useEffect(() => {
                 if (!mapInstance.current) return;
-                
-                console.log("মার্কার রেন্ডার হচ্ছে:", activeSpots.length);
-                
-                markersRef.current.forEach(m => m.remove());
-                markersRef.current = [];
+                Object.values(markersRef.current).forEach(m => m.remove());
+                markersRef.current = {};
 
                 activeSpots.forEach(spot => {
-                    const marker = L.marker([spot.lat, spot.lng], {
-                        icon: L.divIcon({
-                            className: 'custom-marker',
-                            html: `
-                                <div class="flex flex-col items-center">
-                                    <div class="mosjid-marker-pin">
-                                        <svg viewBox="0 0 24 24" fill="white" style="width:24px;height:24px;">
-                                            <path d="M12 2L4.5 11V22H19.5V11L12 2M12 4.44L17.5 11H6.5L12 4.44M11 20H8V13H11V20M16 20H13V13H16V20Z"/>
-                                        </svg>
-                                    </div>
-                                    <div class="bg-black/90 text-white text-[10px] px-2 py-0.5 rounded border border-white/20 mt-1 whitespace-nowrap">${spot.name?.split(' ')[0] || 'মসজিদ'}</div>
-                                </div>
-                            `,
-                            iconSize: [44, 60],
-                            iconAnchor: [22, 50]
-                        })
-                    }).addTo(mapInstance.current);
-
+                    const icon = L.divIcon({
+                        className: 'custom-icon',
+                        html: `<div class="bg-white p-1 rounded-full shadow-2xl border-2 border-emerald-500">
+                                <div class="bg-emerald-500 w-10 h-10 rounded-full flex items-center justify-center text-white text-lg">🍛</div>
+                               </div>`,
+                        iconSize: [44, 44],
+                        iconAnchor: [22, 44]
+                    });
+                    const marker = L.marker([spot.lat, spot.lng], { icon }).addTo(mapInstance.current);
                     marker.bindPopup(`
-                        <div class="p-4 text-center font-sans text-black" style="min-width: 200px;">
-                            <b class="text-base block mb-2 font-bold">${spot.name || 'মসজিদ'}</b>
-                            <p class="text-xs italic mb-3 text-gray-600">${spot.description || 'ইফতার বিতরণ'}</p>
-                            <div class="text-sm font-black bg-emerald-100 text-emerald-700 py-2 rounded-lg mb-3">
-                                ${spot.type || 'খাবার'}
-                            </div>
-                            <div class="flex justify-center gap-4 mb-2">
-                                <button onclick="window.handleVote('${spot.id}', 'real', event)" 
-                                    class="vote-button flex items-center gap-2 px-4 py-2 bg-emerald-50 rounded-xl text-emerald-700 hover:bg-emerald-100 transition-all ${userVotes[spot.id] === 'real' ? 'bg-emerald-200 ring-2 ring-emerald-500' : ''}">
-                                    <span class="text-lg">👍</span>
-                                    <span class="font-bold">${spot.realVotes || 0}</span>
-                                </button>
-                                <button onclick="window.handleVote('${spot.id}', 'fake', event)" 
-                                    class="vote-button flex items-center gap-2 px-4 py-2 bg-red-50 rounded-xl text-red-700 hover:bg-red-100 transition-all ${userVotes[spot.id] === 'fake' ? 'bg-red-200 ring-2 ring-red-500' : ''}">
-                                    <span class="text-lg">👎</span>
-                                    <span class="font-bold">${spot.fakeVotes || 0}</span>
-                                </button>
-                            </div>
-                            <div class="text-[10px] text-gray-400 mt-2">
-                                ${spot.time}
+                        <div class="p-4 font-sans text-gray-800 min-w-[220px]">
+                            <h3 class="font-bold text-lg text-emerald-700 leading-tight">${spot.name}</h3>
+                            <p class="text-[11px] font-bold text-gray-500 mt-1 mb-3">🕒 ইফতার: ${spot.time} PM</p>
+                            <div class="bg-emerald-50 text-emerald-700 p-2.5 rounded-2xl text-xs font-bold mb-3 border border-emerald-100">মেনু: ${spot.type}</div>
+                            <p class="text-[11px] text-gray-600 italic mb-4 leading-relaxed">"${spot.description || 'সবাই আমন্ত্রিত'}"</p>
+                            <div class="flex gap-2 border-t pt-3">
+                                <button onclick="window.handleMapVote('${spot.id}', 'real')" class="flex-1 bg-emerald-100 text-emerald-700 py-2.5 rounded-xl text-[10px] font-bold uppercase active:scale-95 transition-all">👍 আসল (${spot.realVotes || 0})</button>
+                                <button onclick="window.handleMapVote('${spot.id}', 'fake')" class="flex-1 bg-red-50 text-red-600 py-2.5 rounded-xl text-[10px] font-bold uppercase active:scale-95 transition-all">👎 ভুয়া (${spot.fakeVotes || 0})</button>
                             </div>
                         </div>
-                    `, {
-                        className: 'custom-popup',
-                        minWidth: 220
-                    });
-                    
-                    markersRef.current.push(marker);
+                    `, { closeButton: false });
+                    markersRef.current[spot.id] = marker;
                 });
             }, [activeSpots, userVotes]);
 
-            // ভোট হ্যান্ডলার
-            window.handleVote = (spotId, type, event) => {
-                event.stopPropagation();
-                
-                if (userVotes[spotId]) {
-                    if (userVotes[spotId] === type) {
-                        alert("আপনি ইতিমধ্যেই এই স্পটে ভোট দিয়েছেন!");
-                    } else {
-                        alert("আপনি ইতিমধ্যেই ভোট দিয়েছেন! আপনি শুধু একবার ভোট দিতে পারবেন।");
-                    }
-                    return;
-                }
-                
-                const spotIndex = activeSpots.findIndex(s => s.id === spotId);
-                if (spotIndex === -1) return;
-                
-                const updatedSpots = [...activeSpots];
-                if (type === 'real') {
-                    updatedSpots[spotIndex] = {
-                        ...updatedSpots[spotIndex],
-                        realVotes: (updatedSpots[spotIndex].realVotes || 0) + 1
-                    };
-                } else {
-                    updatedSpots[spotIndex] = {
-                        ...updatedSpots[spotIndex],
-                        fakeVotes: (updatedSpots[spotIndex].fakeVotes || 0) + 1
-                    };
-                }
-                
-                setActiveSpots(updatedSpots);
-                
-                const newVotes = { ...userVotes, [spotId]: type };
-                setUserVotes(newVotes);
-                localStorage.setItem('userVotes', JSON.stringify(newVotes));
-                
-                alert(`✅ আপনার ভোট রেকর্ড করা হয়েছে!`);
+            const startPicking = () => {
+                setIsModalOpen(false);
+                setPickingLocation(true);
+                mapInstance.current?.locate({ setView: true, maxZoom: 18 });
             };
 
-            // স্পট যোগ করার ফাংশন
-            const addNewSpot = () => {
-                console.log("addNewSpot কল করা হয়েছে");
-                
-                if (!formData.name) {
-                    alert("❌ মসজিদের নাম লিখুন!");
-                    return;
-                }
-                
-                if (!selectedLocation) {
-                    alert("❌ দয়া করে ম্যাপে একটি লোকেশন সিলেক্ট করুন!");
-                    return;
-                }
-                
+            const handleAddSpot = () => {
+                if (!formData.name || !selectedLocation) return;
+                const finalType = formData.type === 'অন্যান্য' ? (formData.manualItem || 'অন্যান্য') : formData.type;
                 const newSpot = {
                     id: Date.now().toString(),
-                    name: formData.name,
-                    type: formData.type === 'Other' ? formData.manualItem : formData.type,
-                    time: formData.time,
-                    description: formData.description || 'ইফতার বিতরণ',
+                    ...formData,
+                    type: finalType,
                     lat: selectedLocation.lat,
                     lng: selectedLocation.lng,
                     realVotes: 0,
                     fakeVotes: 0,
-                    createdAt: Date.now()
+                    createdAt: new Date().toISOString()
                 };
-                
-                console.log("নতুন স্পট যোগ করা হচ্ছে:", newSpot);
-                
                 setActiveSpots(prev => [...prev, newSpot]);
-                
-                if (tempMarker) {
-                    mapInstance.current.removeLayer(tempMarker);
-                    setTempMarker(null);
-                }
-                
                 setPickingLocation(false);
-                setIsModalOpen(false);
                 setSelectedLocation(null);
-                setLocationInput("");
-                setSearchQuery("");
-                
-                setFormData({ 
-                    name: '', 
-                    type: 'Biriyani', 
-                    manualItem: '', 
-                    time: '18:00', 
-                    description: '', 
-                    lat: RAJSHAHI_COORDS.lat, 
-                    lng: RAJSHAHI_COORDS.lng 
-                });
-                
-                alert("✅ সফলভাবে স্পট যোগ করা হয়েছে!");
+                setFormData({ name: '', type: 'বিরিয়ানি', manualItem: '', time: '18:30', description: '' });
+                if (tempMarkerRef.current) tempMarkerRef.current.remove();
+                setShowSuccess(true);
+                setTimeout(() => setShowSuccess(false), 3000);
+                mapInstance.current.flyTo([newSpot.lat, newSpot.lng], 18);
             };
-            
-            const useAutoLocation = () => {
-                if (autoLocation) {
-                    setSelectedLocation(autoLocation);
-                    setFormData(prev => ({ 
-                        ...prev, 
-                        lat: autoLocation.lat, 
-                        lng: autoLocation.lng 
-                    }));
-                    
-                    if (tempMarker) {
-                        mapInstance.current.removeLayer(tempMarker);
-                    }
-                    
-                    const newMarker = L.marker(autoLocation, {
-                        icon: L.divIcon({
-                            className: 'temp-marker',
-                            html: '<div style="width: 40px; height: 40px; background: #10b981; border: 4px solid white; border-radius: 50%; box-shadow: 0 0 30px #10b981; animation: pulse 1s infinite;"></div>',
-                            iconSize: [40, 40]
-                        })
-                    }).addTo(mapInstance.current);
-                    
-                    setTempMarker(newMarker);
-                    
-                    alert("✅ আপনার বর্তমান লোকেশন সিলেক্ট করা হয়েছে!");
-                } else {
-                    alert("⏳ আপনার লোকেশন পাওয়া যাচ্ছে না, দয়া করে ম্যাপে ক্লিক করুন");
-                }
-            };
-            
-            const setLocationFromLink = () => {
-                if (!locationInput) {
-                    alert("❌ দয়া করে গুগল ম্যাপের লিংক দিন!");
-                    return;
-                }
-                
-                const coords = parseGoogleMapsLink(locationInput);
-                
-                if (coords) {
-                    setSelectedLocation(coords);
-                    setFormData(prev => ({ 
-                        ...prev, 
-                        lat: coords.lat, 
-                        lng: coords.lng 
-                    }));
-                    
-                    mapInstance.current.setView([coords.lat, coords.lng], 18);
-                    
-                    if (tempMarker) {
-                        mapInstance.current.removeLayer(tempMarker);
-                    }
-                    
-                    const newMarker = L.marker([coords.lat, coords.lng], {
-                        icon: L.divIcon({
-                            className: 'temp-marker',
-                            html: '<div style="width: 40px; height: 40px; background: #10b981; border: 4px solid white; border-radius: 50%; box-shadow: 0 0 30px #10b981; animation: pulse 1s infinite;"></div>',
-                            iconSize: [40, 40]
-                        })
-                    }).addTo(mapInstance.current);
-                    
-                    setTempMarker(newMarker);
-                    
-                    alert("✅ গুগল ম্যাপ থেকে লোকেশন সেট করা হয়েছে!");
-                } else {
-                    alert("❌ ভ্যালিড গুগল ম্যাপ লিংক দিন!");
-                }
-            };
-
-            const cancelPicking = () => {
-                setPickingLocation(false);
-                setIsModalOpen(true);
-                if (tempMarker) {
-                    mapInstance.current.removeLayer(tempMarker);
-                    setTempMarker(null);
-                }
-                setSelectedLocation(null);
-                setLocationInput("");
-                setSearchQuery("");
-            };
-
-            const filteredSpots = activeSpots.filter(s => 
-                s.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                (s.type && s.type.toLowerCase().includes(searchQuery.toLowerCase()))
-            );
 
             return (
-                <div className="h-screen w-screen flex flex-col bg-[#080808] relative overflow-hidden">
-                    {isLoading && (
-                        <div className="loading-screen">
-                            <span className="text-8xl animate-bounce mb-8">🍛</span>
-                            <p className="text-emerald-500 font-bold animate-pulse uppercase tracking-widest">লাইভ ম্যাপ লোড হচ্ছে...</p>
+                <div className="h-screen w-full bg-black flex flex-col font-sans text-white overflow-hidden relative">
+                    {showSuccess && (
+                        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[5000] w-[90%] max-w-sm animate-bounce">
+                            <div className="bg-emerald-600 p-4 rounded-[2rem] shadow-2xl flex items-center gap-3 border border-white/20">
+                                <div className="bg-white p-1 rounded-full text-emerald-600"><Icons.Check /></div>
+                                <div>
+                                    <p className="font-bold text-sm text-white">ইফতার পয়েন্ট যোগ হয়েছে!</p>
+                                    <p className="text-[10px] text-emerald-100 font-bold uppercase tracking-widest">সবাইকে জানানোর জন্য ধন্যবাদ</p>
+                                </div>
+                            </div>
                         </div>
                     )}
 
-                    {/* ইফতার ও মসজিদের আদব - ২ টি র‍্যান্ডম দেখাবে */}
-                    {currentAdabs.length > 0 && !pickingLocation && (
-                        <div className="absolute top-24 left-4 right-4 z-30 flex flex-col gap-2">
-                            {currentAdabs.map((adab, index) => (
-                                <div key={adab.id} className="adab-card p-3 rounded-xl shadow-lg animate-in slide-in-from-top duration-500" style={{animationDelay: `${index * 100}ms`}}>
+                    <div className="absolute top-0 left-0 right-0 z-[1000] p-4 pointer-events-none">
+                        <div className="max-w-md mx-auto flex flex-col gap-3">
+                            <div className="bg-white/95 backdrop-blur-xl p-4 rounded-[2.5rem] flex justify-between items-center pointer-events-auto shadow-2xl border border-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-emerald-600 p-2.5 rounded-2xl text-white shadow-lg"><Icons.MapPin /></div>
+                                    <div className="text-gray-900">
+                                        <h1 className="text-sm font-black uppercase leading-none">রিয়েল ইফতার ম্যাপ</h1>
+                                        <p className="text-[9px] font-bold text-emerald-600 uppercase mt-0.5 tracking-widest">রাজশাহী লাইভ আপডেট</p>
+                                    </div>
+                                </div>
+                                <div className="bg-emerald-50 px-3 py-1.5 rounded-full flex items-center gap-2 border border-emerald-100">
+                                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                                    <span className="text-[10px] font-bold text-emerald-700 uppercase">{activeSpots.length} সক্রিয়</span>
+                                </div>
+                            </div>
+                            {!pickingLocation && (
+                                <div className="bg-black/60 backdrop-blur-md border border-white/10 p-3 rounded-2xl">
                                     <div className="flex items-start gap-2">
-                                        <span className="text-emerald-400 font-bold text-sm bg-emerald-900/30 w-6 h-6 rounded-full flex items-center justify-center shrink-0">✨</span>
-                                        <p className="text-white text-xs leading-relaxed">{adab.bn}</p>
+                                        <div className="text-emerald-400 mt-0.5"><Icons.Info /></div>
+                                        <p className="text-[10px] leading-relaxed text-gray-100 italic">{currentAdab}</p>
                                     </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* সার্চ বার - লোকেশন পিকিং মোডে ভিন্ন রকম */}
-                    <header className={`p-4 z-20 transition-opacity duration-300 ${pickingLocation ? 'opacity-100' : 'opacity-100'}`}>
-                        <div className="flex gap-2 bg-black/50 backdrop-blur-xl p-2 rounded-full border border-white/5 items-center shadow-2xl relative">
-                            <div className="bg-emerald-500 w-10 h-10 rounded-full flex items-center justify-center shadow-lg text-xl shrink-0">🍛</div>
-                            <input 
-                                ref={searchInputRef}
-                                className="flex-1 bg-transparent outline-none text-sm px-2 font-bold text-white placeholder:text-gray-600" 
-                                placeholder={pickingLocation ? "মসজিদ খুঁজে সরাসরি সিলেক্ট করুন..." : "মসজিদ খুঁজুন..."}
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                onFocus={() => pickingLocation && searchQuery.length > 1 && setShowSuggestions(true)}
-                                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                            />
-                            
-                            {/* সার্চ সাজেশন - লোকেশন পিকিং মোডে দেখাবে */}
-                            {showSuggestions && searchSuggestions.length > 0 && pickingLocation && (
-                                <div className="absolute top-full left-0 right-0 mt-2 search-suggestion rounded-2xl shadow-2xl overflow-hidden z-[1001]">
-                                    {searchSuggestions.map((mosjid, index) => (
-                                        <div 
-                                            key={index}
-                                            className="search-suggestion-item p-3 cursor-pointer border-b border-white/5 last:border-0"
-                                            onClick={() => selectSuggestion(mosjid)}
-                                        >
-                                            <div className="flex items-start gap-3">
-                                                <span className="text-emerald-400 text-lg shrink-0">🕌</span>
-                                                <div className="flex-1">
-                                                    <div className="text-white text-sm font-bold">{mosjid.name}</div>
-                                                    <div className="text-gray-400 text-[10px]">{mosjid.address || 'বাংলাদেশ'}</div>
-                                                </div>
-                                                <span className="text-emerald-400 text-xs">সিলেক্ট</span>
-                                            </div>
-                                        </div>
-                                    ))}
                                 </div>
                             )}
                         </div>
-                    </header>
-
-                    {/* ম্যাপ এরিয়া */}
-                    <div ref={mapRef} className="flex-1 relative z-10">
-                        {pickingLocation && (
-                            <>
-                                <div className="center-pin">
-                                    <div className="relative">
-                                        <div className="w-12 h-12 bg-emerald-500 rounded-full animate-ping opacity-50 absolute"></div>
-                                        <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center relative border-4 border-white">
-                                            <div className="w-4 h-4 bg-white rounded-full"></div>
-                                        </div>
-                                    </div>
-                                    <p className="text-white text-sm mt-4 bg-black/70 px-4 py-2 rounded-full whitespace-nowrap font-bold">
-                                        👇 মসজিদের位置上 ক্লিক করুন বা উপরে খুঁজুন
-                                    </p>
-                                </div>
-                            </>
-                        )}
                     </div>
 
-                    {/* কনফার্ম বাটন এবং লোকেশন অপশন */}
+                    <div ref={mapRef} className="flex-1 relative z-10 bg-neutral-900" />
+
                     {pickingLocation && (
-                        <div className="fixed bottom-8 left-0 right-0 z-[1000] px-4">
-                            <div className="bg-black/90 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-2xl max-w-md mx-auto">
-                                
-                                {/* গুগল ম্যাপ লিংক ইনপুট */}
-                                <div className="mb-4">
-                                    <p className="text-[10px] text-gray-500 font-bold uppercase mb-2">গুগল ম্যাপ লিংক দিন</p>
-                                    <div className="flex gap-2">
-                                        <input 
-                                            type="text"
-                                            placeholder="https://www.google.com/maps/place/..."
-                                            className="flex-1 bg-black/50 p-3 rounded-xl text-white text-xs border border-white/10 outline-none focus:border-emerald-500"
-                                            value={locationInput}
-                                            onChange={(e) => setLocationInput(e.target.value)}
-                                        />
-                                        <button 
-                                            onClick={setLocationFromLink}
-                                            className="px-4 py-2 bg-blue-600 rounded-xl text-white text-xs font-bold hover:bg-blue-700 transition-all whitespace-nowrap"
-                                        >
-                                            সেট
-                                        </button>
-                                    </div>
-                                    <p className="text-[8px] text-gray-600 mt-1">
-                                        📍 ফরম্যাট: @23.8103,90.4125 বা 3d23.8103!4d90.4125
+                        <div className="absolute bottom-12 inset-x-0 z-[2000] px-6">
+                            <div className="bg-white p-7 rounded-[3.5rem] shadow-2xl flex flex-col gap-5 max-w-sm mx-auto border-4 border-emerald-500">
+                                <div className="text-center text-gray-900">
+                                    <h3 className="font-bold text-xl leading-tight">স্পট নিশ্চিত করুন</h3>
+                                    <p className="text-[10px] text-gray-500 font-bold uppercase mt-1 tracking-widest">
+                                        {selectedLocation ? "লোকেশন পাওয়া গেছে ✅" : "ম্যাপে স্পট-এর ওপর টাচ করুন"}
                                     </p>
                                 </div>
-                                
-                                {/* অটো লোকেশন বাটন */}
-                                {autoLocation && (
-                                    <button 
-                                        onClick={useAutoLocation}
-                                        className="w-full mb-4 py-3 bg-purple-600 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-purple-700"
-                                    >
-                                        <span>📍</span> আমার বর্তমান লোকেশন ব্যবহার করুন
-                                    </button>
-                                )}
-                                
-                                {/* লোকেশন তথ্য */}
-                                <div className="text-center mb-4">
-                                    <p className="text-xs text-gray-500 font-bold uppercase mb-1">
-                                        {selectedLocation ? '✅ সিলেক্ট করা হয়েছে' : '👆 ম্যাপে ক্লিক করুন বা খুঁজুন'}
-                                    </p>
-                                    {selectedLocation ? (
-                                        <div className="text-emerald-400 text-sm font-mono">
-                                            {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
-                                        </div>
-                                    ) : (
-                                        <div className="text-yellow-500 text-sm">
-                                            ⚠️ এখনও সিলেক্ট করেননি
-                                        </div>
-                                    )}
-                                    <div className="mt-2 text-white font-bold text-lg">
-                                        {formData.name || 'মসজিদের নাম'}
-                                    </div>
-                                </div>
-                                
-                                {/* বাটন গ্রুপ */}
                                 <div className="flex gap-2">
-                                    <button 
-                                        onClick={addNewSpot}
-                                        disabled={!selectedLocation}
-                                        className={`flex-1 py-4 rounded-xl font-bold text-white transition-all ${
-                                            selectedLocation 
-                                                ? 'bg-emerald-600 active:scale-95 shadow-lg shadow-emerald-900/40 hover:bg-emerald-700' 
-                                                : 'bg-gray-600 opacity-50 cursor-not-allowed'
-                                        }`}
-                                    >
-                                        {selectedLocation ? '✅ কনফার্ম' : '⏳ সিলেক্ট করুন'}
-                                    </button>
-                                    
-                                    <button 
-                                        onClick={cancelPicking}
-                                        className="px-6 py-4 bg-red-600 rounded-xl text-white font-bold active:scale-95 transition-all shadow-lg shadow-red-900/40 hover:bg-red-700"
-                                    >
-                                        ✕
-                                    </button>
+                                    <button onClick={() => {setPickingLocation(false); setIsModalOpen(true);}} className={`flex-1 py-4.5 rounded-3xl font-bold text-sm transition-all shadow-xl active:scale-95 ${selectedLocation ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-300'}`} disabled={!selectedLocation}>এই খানেই যোগ করুন</button>
+                                    <button onClick={() => {setPickingLocation(false); setSelectedLocation(null); if (tempMarkerRef.current) tempMarkerRef.current.remove();}} className="px-6 bg-red-50 text-red-500 py-4.5 rounded-3xl font-bold">বাতিল</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* অ্যাকশন বাটন */}
-                    <div className={`fixed bottom-28 right-6 z-20 flex flex-col gap-4 ${pickingLocation ? 'hidden' : 'flex'}`}>
-                        <button className="w-14 h-14 bg-white/5 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center shadow-xl active:scale-90 transition-all hover:bg-white/10" onClick={() => mapInstance.current?.locate({ setView: true })}>
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
-                        </button>
-                        <button className="w-16 h-16 bg-orange-600 rounded-full flex items-center justify-center shadow-[0_10px_30px_rgba(234,88,12,0.4)] text-4xl font-bold active:scale-90 transition-all hover:rotate-90 hover:bg-orange-700" onClick={() => setIsModalOpen(true)}>+</button>
-                    </div>
-
-                    {/* নিচের লিস্ট */}
-                    <div className={`fixed inset-x-0 bottom-0 z-40 bg-[#0c0c0c] border-t border-white/5 rounded-t-[2.5rem] transition-all duration-500 ease-out flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,1)] ${isBottomSheetOpen ? 'h-[75vh]' : 'h-24'} ${pickingLocation ? 'translate-y-full' : ''}`}>
-                        <div onClick={() => setIsBottomSheetOpen(!isBottomSheetOpen)} className="w-full flex flex-col items-center py-4 cursor-pointer active:bg-white/5">
-                            <div className="w-10 h-1 bg-white/20 rounded-full mb-3"></div>
-                            <div className="flex justify-between w-full px-8 items-center">
-                                <div className="flex items-center gap-2">
-                                    <span className="font-black text-emerald-500 text-sm uppercase tracking-wider">কাছের ডিস্ট্রিবিউশন</span>
-                                    <span className="bg-emerald-900/50 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-bold">{filteredSpots.length} টা</span>
-                                </div>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className={`transition-transform duration-300 ${isBottomSheetOpen ? 'rotate-180' : ''}`}><path d="m18 15-6-6-6 6"/></svg>
-                            </div>
+                    {!pickingLocation && (
+                        <div className="fixed bottom-28 right-6 z-[1000] flex flex-col gap-4">
+                            <button onClick={() => mapInstance.current?.locate({ setView: true, maxZoom: 18 })} className="w-14 h-14 bg-white rounded-2xl shadow-2xl flex items-center justify-center text-emerald-600 active:scale-90 border-2 border-emerald-100 hover:bg-emerald-50"><Icons.Locate /></button>
+                            <button onClick={() => setIsModalOpen(true)} className="w-16 h-16 bg-emerald-600 rounded-[2.2rem] shadow-2xl flex items-center justify-center text-white active:scale-90 border-4 border-white"><Icons.Plus /></button>
                         </div>
-                        <div className="flex-1 overflow-y-auto px-6 pb-10 hide-scrollbar">
-                            {filteredSpots.length === 0 ? (
-                                <div className="text-center py-20 opacity-20 font-bold">কোনো স্পট পাওয়া যায়নি</div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {filteredSpots.map(spot => (
-                                        <div key={spot.id} onClick={() => { mapInstance.current?.flyTo([spot.lat, spot.lng], 17); setIsBottomSheetOpen(false); }} className="bg-white/5 p-4 rounded-[2rem] border border-white/5 flex gap-4 items-center active:bg-white/10 transition-all cursor-pointer">
-                                            <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-2xl shrink-0">🕌</div>
+                    )}
+
+                    {!pickingLocation && (
+                        <div className={`fixed inset-x-0 bottom-0 z-[1500] bg-white rounded-t-[4rem] transition-all duration-700 shadow-2xl ${isBottomSheetOpen ? 'h-[75vh]' : 'h-24'}`}>
+                            <div onClick={() => setIsBottomSheetOpen(!isBottomSheetOpen)} className="w-full flex flex-col items-center py-5 cursor-pointer">
+                                <div className="w-16 h-1.5 bg-gray-200 rounded-full mb-3 shadow-inner"></div>
+                                <div className="flex justify-between w-full px-12 items-center text-gray-900 font-bold uppercase text-xs tracking-widest">
+                                    <div className="flex items-center gap-3"><div className="text-emerald-600"><Icons.MapIcon /></div> सक्रिय ইফতার পয়েন্ট লিস্ট</div>
+                                    <div className={`transition-transform ${isBottomSheetOpen ? 'rotate-180' : ''}`}>▼</div>
+                                </div>
+                            </div>
+                            <div className="flex-1 overflow-y-auto px-6 pb-14 space-y-4 custom-scrollbar">
+                                {activeSpots.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-24 opacity-30 text-center"><div className="text-7xl mb-6">🌙</div><p className="text-xs font-bold uppercase text-gray-900">লিস্ট এখন খালি</p></div>
+                                ) : (
+                                    activeSpots.map(spot => (
+                                        <div key={spot.id} className="bg-gray-50 p-6 rounded-[2.5rem] flex gap-4 items-center border border-gray-100 active:scale-[0.98] transition-all shadow-sm">
+                                            <div className="w-16 h-16 bg-emerald-600 text-white rounded-[1.8rem] flex items-center justify-center text-3xl shadow-lg border-2 border-white/20">🕌</div>
                                             <div className="flex-1 min-w-0">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <h4 className="font-bold text-white truncate text-base tracking-tight">{spot.name}</h4>
-                                                    <span className="text-[10px] font-black text-emerald-400 uppercase bg-emerald-500/10 px-2 py-0.5 rounded-md">{spot.type}</span>
+                                                <h4 className="font-bold text-gray-900 truncate text-base mb-1">{spot.name}</h4>
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <span className="text-[10px] font-bold text-gray-400 bg-white px-2 py-0.5 rounded-full border border-gray-100">{spot.time} PM</span>
+                                                    <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">{spot.type}</span>
                                                 </div>
-                                                <div className="flex justify-between items-center text-[11px] text-gray-500 font-bold uppercase tracking-widest">
-                                                    <span>{spot.time}</span>
-                                                    <div className="flex gap-2">
-                                                        <span className="text-emerald-400">👍 {spot.realVotes || 0}</span>
-                                                        <span className="text-red-400">👎 {spot.fakeVotes || 0}</span>
-                                                    </div>
+                                                <div className="flex gap-2">
+                                                    <button onClick={(e) => { e.stopPropagation(); handleVote(spot.id, 'real'); }} className={`flex-1 py-2 rounded-xl text-[10px] font-bold border transition-all ${userVotes[spot.id] === 'real' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-gray-500 border-gray-200'}`}>আসল ({spot.realVotes || 0})</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleVote(spot.id, 'fake'); }} className={`flex-1 py-2 rounded-xl text-[10px] font-bold border transition-all ${userVotes[spot.id] === 'fake' ? 'bg-red-500 text-white border-red-500' : 'bg-white text-gray-400 border-gray-200'}`}>ভুয়া ({spot.fakeVotes || 0})</button>
                                                 </div>
                                             </div>
+                                            <button onClick={() => {mapInstance.current.flyTo([spot.lat, spot.lng], 19); setIsBottomSheetOpen(false);}} className="p-4 bg-white border border-gray-200 rounded-[2rem] text-emerald-600 shadow-xl"><Icons.Navigation /></button>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
+                                    ))
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
-                    {/* স্পট ইনফো মোডাল */}
                     {isModalOpen && (
-                        <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-6 backdrop-blur-lg animate-in fade-in duration-300 overflow-y-auto">
-                            <div className="bg-[#121212] w-full max-w-sm p-8 rounded-[3.5rem] border border-white/5 shadow-2xl relative">
-                                <button className="absolute top-8 right-8 text-gray-500 text-2xl hover:text-white" onClick={() => setIsModalOpen(false)}>✕</button>
-                                <h3 className="text-2xl font-black mb-8 tracking-tighter text-white">ডিস্ট্রিবিউশন তথ্য</h3>
-                                <div className="space-y-4">
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-gray-600 uppercase ml-3">মসজিদের নাম *</label>
-                                        <input 
-                                            className="w-full bg-black p-4 rounded-2xl border border-white/5 outline-none font-bold text-white placeholder:text-gray-700 focus:ring-1 focus:ring-emerald-500/30 transition-all" 
-                                            placeholder="যেমন: রাজশাহী কেন্দ্রীয় মসজিদ" 
-                                            value={formData.name} 
-                                            onChange={(e) => setFormData({...formData, name: e.target.value})} 
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-gray-600 uppercase ml-3">মেনু</label>
-                                            <select className="w-full bg-black p-4 rounded-2xl outline-none border border-white/5 text-white font-bold appearance-none" value={formData.type} onChange={(e) => setFormData({...formData, type: e.target.value})}>
-                                                <option value="Biriyani">বিরিয়ানি</option>
-                                                <option value="Khichuri">খিচুড়ি</option>
-                                                <option value="Haleem">হালিম</option>
-                                                <option value="Other">অন্যান্য</option>
+                        <div className="fixed inset-0 z-[3000] bg-black/95 backdrop-blur-xl p-6 flex items-center justify-center">
+                            <div className="bg-white w-full max-w-sm p-8 rounded-[4rem] border-4 border-emerald-500 shadow-2xl relative max-h-[92vh] overflow-y-auto custom-scrollbar">
+                                <button onClick={() => setIsModalOpen(false)} className="absolute top-10 right-10 text-gray-300 hover:text-gray-900 transition-colors"><Icons.X /></button>
+                                <h2 className="text-2xl font-black mb-10 text-gray-900 text-center leading-tight">ইফতার পয়েন্ট শেয়ার করুন</h2>
+                                <div className="space-y-6">
+                                    <input className="w-full bg-gray-50 p-5 rounded-3xl border border-gray-100 font-bold text-sm text-gray-900 outline-none focus:border-emerald-500 shadow-inner" placeholder="মসজিদের নাম" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="relative">
+                                            <select className="w-full bg-gray-50 p-5 rounded-3xl border border-gray-100 font-bold text-sm text-gray-900 outline-none appearance-none" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})}>
+                                                <option value="বিরিয়ানি">বিরিয়ানি</option><option value="খিচুড়ি">খিচুড়ি</option><option value="হালিম">হালিম</option><option value="অন্যান্য">অন্যান্য</option>
                                             </select>
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">▼</div>
                                         </div>
+                                        <input type="time" className="bg-gray-50 p-5 rounded-3xl border border-gray-100 font-bold text-sm text-gray-900 outline-none focus:border-emerald-500" value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} />
                                     </div>
-                                    {formData.type === 'Other' && (
-                                        <input className="w-full bg-emerald-900/20 p-4 rounded-2xl border border-emerald-500/20 outline-none font-black text-emerald-400" placeholder="আইটেমের নাম লিখুন" value={formData.manualItem} onChange={(e) => setFormData({...formData, manualItem: e.target.value})} />
+                                    {formData.type === 'অন্যান্য' && <input className="w-full bg-emerald-50 p-5 rounded-3xl border border-emerald-200 font-bold text-sm text-emerald-900 outline-none" placeholder="কি খাবার?" value={formData.manualItem} onChange={e => setFormData({...formData, manualItem: e.target.value})} />}
+                                    <textarea className="w-full bg-gray-50 p-5 rounded-3xl border border-gray-100 font-bold text-xs h-24 text-gray-900 outline-none resize-none shadow-inner" placeholder="বিস্তারিত আমন্ত্রণ..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+                                    {!selectedLocation ? (
+                                        <button onClick={startPicking} className="w-full bg-emerald-600 py-6 rounded-3xl font-black text-sm text-white shadow-2xl flex items-center justify-center gap-3 active:scale-95 mt-4"><Icons.MapPin /> ম্যাপে লোকেশন দিন</button>
+                                    ) : (
+                                        <div className="flex flex-col gap-4 mt-4">
+                                            <div className="bg-emerald-50 p-5 rounded-3xl border-2 border-dashed border-emerald-200 flex justify-between items-center">
+                                                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">লোকেশন প্রস্তুত ✅</span>
+                                                <button onClick={startPicking} className="text-emerald-600 bg-white p-2 rounded-xl shadow-sm"><Icons.Layers /></button>
+                                            </div>
+                                            <button onClick={handleAddSpot} className="w-full bg-emerald-600 py-6 rounded-[2.5rem] font-black text-xl text-white shadow-2xl active:scale-95">লাইভ করুন 🚀</button>
+                                        </div>
                                     )}
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-gray-600 uppercase ml-3">আমন্ত্রণ</label>
-                                        <input className="w-full bg-black p-4 rounded-2xl border border-white/5 outline-none font-bold text-white placeholder:text-gray-700" placeholder="আমন্ত্রণ লিখুন..." value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
-                                    </div>
-                                    <div className="flex items-center gap-3 bg-black p-1 rounded-2xl border border-white/5">
-                                        <label className="text-[10px] text-gray-500 font-black uppercase ml-3 shrink-0">সময়:</label>
-                                        <input type="time" className="flex-1 bg-transparent p-4 rounded-xl outline-none text-white font-bold" value={formData.time} onChange={(e) => setFormData({...formData, time: e.target.value})} />
-                                    </div>
                                 </div>
-                                <button 
-                                    className="w-full bg-emerald-600 py-6 rounded-full font-black text-lg mt-10 active:scale-95 transition-all shadow-xl shadow-emerald-900/40 hover:bg-emerald-500" 
-                                    onClick={() => { 
-                                        if(!formData.name) {
-                                            alert("মসজিদের নাম লিখুন!");
-                                            return;
-                                        }
-                                        setIsModalOpen(false); 
-                                        setPickingLocation(true);
-                                    }}
-                                >
-                                    🗺️ ম্যাপে লোকেশন সিলেক্ট করুন
-                                </button>
                             </div>
                         </div>
                     )}
